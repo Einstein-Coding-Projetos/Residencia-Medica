@@ -1,0 +1,100 @@
+# RMS-Brasil — Sistema Integrado de Gestão da Residência Médica
+
+Sistema digital para gestão da residência médica do HSPM, em conformidade com a Resolução CNRM nº 4/2023. Piloto inicial: Cirurgia Geral (R1–R3) e Cirurgia de Cabeça e Pescoço (R4–R5).
+
+## Sobre o projeto
+
+O sistema estrutura a avaliação de residentes com instrumentos validados internacionalmente (OSATS, Mini-CEX, NOTSS, Zwisch Scale, SETQ Smart), organiza a progressão clínica em Atividades Profissionais Confiáveis (EPAs) medidas pela Escala de Entrustamento de Ten Cate, e garante governança de integridade dos dados (imutabilidade, auditoria, separação de papéis, detecção de anomalias).
+
+Quatro papéis de usuário: residente, preceptor, R4/R5 (avaliador intermediário) e administrador — o administrador é um papel de gestão do sistema, separado do preceptor, sem funções clínicas. Notificações de prazo são enviadas ao preceptor. Usuários reais (residentes, preceptores) são cadastrados pela equipe médica somente após a entrega do projeto; durante o desenvolvimento o time trabalha com dados de teste. O sistema não trata edição concorrente do mesmo registro — cada avaliação tem um único responsável pelo envio.
+
+## Funcionalidades
+
+### MVP (entrega piloto)
+- Gestão de rodízios — cadastro de programas, especialidades, alocação residente-preceptor-serviço
+- Avaliação estruturada — fichas digitais OSATS, Mini-CEX, NOTSS, Zwisch Scale e SETQ Smart, com cálculo automático de score
+- Portfólio do residente — histórico longitudinal de avaliações e EPAs, exportável em PDF
+- EPAs e progressão — mapa de EPAs por especialidade, registro de observações, avanço de nível de entrustamento com validação de mínimos
+- Governança — imutabilidade dos registros (hash SHA-256 + trilha de auditoria), verificação de contexto, separação de papéis, alertas de engajamento por omissão
+- Dashboards básicos por perfil (residente, preceptor, administrador)
+- Notificações de prazo e mecanismo de discordância formal
+- Acessibilidade básica para usuários com menos familiaridade digital
+
+### Futuras
+- Detecção estatística de anomalia com maturidade de dados acumulados
+- Dashboards avançados (radar CanMEDS, comparativo de turma anonimizado)
+- Validação psicométrica de NOTSS e Zwisch em português (estudo científico, trilha separada)
+- SSO com Active Directory do hospital
+- Expansão multiespecialidade
+
+## Stack técnica
+
+| Camada | Tecnologia |
+|---|---|
+| Frontend web | React 18 + TypeScript, React Hook Form + Zod, TanStack Query |
+| Backend | Python 3.12+ com FastAPI |
+| Validação de dados | Pydantic |
+| Acesso ao banco / migrações | SQLAlchemy + Alembic |
+| Banco de dados | PostgreSQL 15+ com pgAudit |
+| Autenticação | JWT  + passlib para hash de senha (SSO institucional como evolução) |
+| Hospedagem | (AWS São Paulo ou Azure Brasil Sul — residência de dados exigida pela LGPD) |
+| Observabilidade | Sentry  |
+| Testes | pytest (backend) · Jest / Vitest (frontend) |
+| Gestão | Git + GitHub Projects (Kanban, Issues, PRs) |
+
+## Estrutura do repositório (monorepo)
+
+```
+rms-brasil/
+├── apps/
+│   ├── web/          → frontend React (package.json, npm)
+│   └── api/          → backend Python/FastAPI (pyproject.toml, requirements.txt)
+├── .github/workflows/ → configuração de CI/CD
+```
+
+
+## Como rodar localmente
+
+### Pré-requisitos
+- Python 3.10+ (recomendado 3.12)
+- Node.js 20+ e npm (para o frontend)
+- PostgreSQL 15+ (local ou via Docker)
+- Acesso ao repositório no GitHub
+
+
+## Fluxo de trabalho (Git)
+
+1. Criar branch a partir da `main`:
+   ```bash
+   git checkout main
+   git pull --rebase origin main
+   git checkout -b feat/minha-tarefa
+   ```
+2. Editar, adicionar e commitar:
+   ```bash
+   git add -A
+   git commit -m "feat: descreva a mudança de forma objetiva"
+   ```
+3. Subir a branch:
+   ```bash
+   git push -u origin feat/minha-tarefa
+   ```
+4. Abrir Pull Request no GitHub: base `main` ← compare `feat/minha-tarefa`. Relacione a issue com `Fixes #123` se aplicável.
+5. Se a `main` mudar enquanto você trabalha:
+   ```bash
+   git fetch origin
+   git rebase origin/main
+   ```
+   Se houver conflitos: edite os arquivos marcados, `git add <arquivo>`, `git rebase --continue`, depois `git push --force-with-lease`.
+
+## Comandos úteis
+
+| Comando | O que faz |
+|---|---|
+| `git status` | Estado do repositório |
+| `git diff` | Diffs não staged |
+| `git diff --staged` | Diffs staged |
+| `git log --oneline --graph` | Histórico resumido |
+| `git restore <arquivo>` | Desfaz alterações locais antes do commit |
+| `git restore --staged <arquivo>` | Tira do staged |
+| `git revert <commit>` | Cria commit que reverte outro (histórico preservado) |
