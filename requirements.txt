@@ -1,0 +1,18 @@
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+sqlalchemy>=2.0.30
+pydantic[email]>=2.7.0
+pydantic-settings>=2.3.0
+
+# Hash de senha. Pinado de propósito: passlib 1.7.4 lê bcrypt.__about__,
+# que sumiu no bcrypt 4.1. Com versão solta o login funciona mas cospe
+# erro no log a cada requisição.
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
+
+PyJWT>=2.8.0
+psycopg[binary]>=3.1.0   # driver do Postgres
+
+# desenvolvimento
+pytest>=8.0.0
+httpx>=0.27.0
