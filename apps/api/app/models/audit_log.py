@@ -1,14 +1,39 @@
-from sqlalchemy import Column, Integer, String, DateTime, func
-from app.database import Base
+import json
+import os
+
+AUDIT_LOG = "audit_log.json"
 
 
-class AuditLog(Base):
-    __tablename__ = "audit_log"
+if not os.path.exists(AUDIT_LOG):
+    with open(AUDIT_LOG, "w", encoding="utf-8") as f:
+        json.dump([], f, ensure_ascii=False, indent=4)
 
-    id = Column(Integer, primary_key=True, index=True)
-    usuario_id = Column(Integer, nullable=False)
-    acao = Column(String, nullable=False)
-    tabela_afetada = Column(String, nullable=False)
-    registro_id = Column(Integer, nullable=False)
-    timestamp_servidor = Column(DateTime(timezone=True), server_default=func.now())
-    ip_origem = Column(String, nullable=True)
+
+def ler_audit_log():
+
+    try:
+
+        with open(AUDIT_LOG, "r", encoding="utf-8") as f:
+
+            conteudo = f.read().strip()
+
+            if conteudo == "":
+                return []
+
+            return json.loads(conteudo)
+
+    except (json.JSONDecodeError, FileNotFoundError):
+
+        return []
+
+
+def salvar_audit_log(dados):
+
+    with open(AUDIT_LOG, "w", encoding="utf-8") as f:
+
+        json.dump(
+            dados,
+            f,
+            indent=4,
+            ensure_ascii=False
+        )
