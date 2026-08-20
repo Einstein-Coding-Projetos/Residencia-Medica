@@ -28,18 +28,58 @@ class Papel(str, enum.Enum):
 PAPEIS_AVALIADORES = frozenset({Papel.PRECEPTOR, Papel.AVALIADOR_INTERMEDIARIO})
 
 
+class Especialidade(Base):
+    """A área médica em si (ex.: Cirurgia Geral, Cirurgia de Cabeça e Pescoço).
+
+    Separada de Programa porque a mesma especialidade pode existir em
+    mais de um programa/instituição.
+    """
+
+    __tablename__ = "especialidades"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    nome: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
+    ativo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
+
+    programas: Mapped[list["Programa"]] = relationship(back_populates="especialidade")
+
+
 class Programa(Base):
+    """O 'onde': ex. Residência em Cirurgia Geral no Hospital X."""
+
     __tablename__ = "programas"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     nome: Mapped[str] = mapped_column(String(180), nullable=False)
-    especialidade: Mapped[str] = mapped_column(String(120), nullable=False)
+    especialidade_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("especialidades.id"), nullable=False
+    )
     instituicao: Mapped[str] = mapped_column(String(180), nullable=False)
     duracao_anos: Mapped[int] = mapped_column(nullable=False, default=5)
     ativo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
 
+    especialidade: Mapped["Especialidade"] = relationship(back_populates="programas")
     usuarios: Mapped[list["Usuario"]] = relationship(back_populates="programa")
+    servicos: Mapped[list["Servico"]] = relationship(back_populates="programa")
+
+
+class Servico(Base):
+    """O setor dentro do hospital (ex.: Enfermaria, Ambulatório, Centro
+    Cirúrgico) onde o residente atua no dia a dia. Vinculado a um Programa."""
+
+    __tablename__ = "servicos"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    nome: Mapped[str] = mapped_column(String(120), nullable=False)
+    programa_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("programas.id"), nullable=False
+    )
+    ativo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
+
+    programa: Mapped["Programa"] = relationship(back_populates="servicos")
 
 
 class Usuario(Base):

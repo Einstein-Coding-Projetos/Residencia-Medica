@@ -29,19 +29,11 @@ class TokenResponse(BaseModel):
     usuario: UsuarioPublico
 
 
-class ProgramaCreate(BaseModel):
-    nome: str = Field(min_length=3, max_length=180)
-    especialidade: str = Field(min_length=3, max_length=120)
-    instituicao: str = Field(min_length=3, max_length=180)
-    duracao_anos: int = Field(ge=1, le=10, default=5)
+class UsuarioCreate(BaseModel):
+    """Cadastro de usuário pela API — só administrador pode chamar essa rota."""
 
-
-class ProgramaPublico(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    nome: str
-    especialidade: str
-    instituicao: str
-    duracao_anos: int
-    ativo: bool
+    nome: str = Field(min_length=2, max_length=180)
+    email: EmailStr
+    senha: str = Field(min_length=8, max_length=72)
+    papel: Papel
+    programa_id: uuid.UUID | None = None

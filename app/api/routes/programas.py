@@ -10,7 +10,7 @@ from app.api.deps import SomenteAdministrador, UsuarioAtual
 from app.core.auth_service import registrar_auditoria
 from app.db.models import Programa
 from app.db.session import get_db
-from app.schemas.auth import ProgramaCreate, ProgramaPublico
+from app.schemas.cadastros import ProgramaCreate, ProgramaPublico
 
 router = APIRouter(prefix="/programas", tags=["programas"])
 
