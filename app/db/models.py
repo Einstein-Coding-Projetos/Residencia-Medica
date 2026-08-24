@@ -119,6 +119,68 @@ class LogAuditoria(Base):
     detalhe: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     ip_origem: Mapped[str | None] = mapped_column(String(45), nullable=True)
     hash_registro: Mapped[str] = mapped_column(String(64), nullable=False)
+class Avaliacao(Base):
+    __tablename__ = "avaliacoes"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+
+    residente_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("usuarios.id"),
+        nullable=False,
+    )
+
+    avaliador_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("usuarios.id"),
+        nullable=False,
+    )
+
+    instrumento: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+    )
+
+    itens: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+    )
+
+    observacoes: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default="",
+    )
+
+    nota: Mapped[float] = mapped_column(
+        nullable=False,
+    )
+
+    confirmado: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+    )
+
+    hash_integridade: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+    )
+
+    criado_em: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=agora_utc,
+    )
+
+    confirmado_em: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
 
     @staticmethod
     def calcular_hash(payload: dict) -> str:
