@@ -119,6 +119,13 @@ class LogAuditoria(Base):
     detalhe: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     ip_origem: Mapped[str | None] = mapped_column(String(45), nullable=True)
     hash_registro: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    @staticmethod
+    def calcular_hash(payload: dict) -> str:
+        canonico = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+        return hashlib.sha256(canonico.encode("utf-8")).hexdigest()
+
+
 class Avaliacao(Base):
     __tablename__ = "avaliacoes"
 
@@ -166,6 +173,16 @@ class Avaliacao(Base):
         default=False,
     )
 
+    faixa_rotulo: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+    )
+
+    declaracao_observacao: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
     hash_integridade: Mapped[str | None] = mapped_column(
         String(64),
         nullable=True,
@@ -180,9 +197,3 @@ class Avaliacao(Base):
         DateTime(timezone=True),
         nullable=True,
     )
-
-
-    @staticmethod
-    def calcular_hash(payload: dict) -> str:
-        canonico = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
-        return hashlib.sha256(canonico.encode("utf-8")).hexdigest()
