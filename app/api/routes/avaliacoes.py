@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -12,11 +11,22 @@ from app.api.deps import SomenteAvaliador, UsuarioAtual
 from app.core.auth_service import registrar_auditoria
 from app.core.confirmar_registro import confirmar_registro
 from app.core.immutability import bloquear_se_confirmado
+from app.core.instrumentos import (
+    DECLARACAO_OBSERVACAO_DIRETA,
+    InstrumentoDesconhecido,
+    ItensInvalidos,
+    calcular_resultado,
+    obter_instrumento,
+    validar_itens,
+)
 from app.core.permissoes_avaliacao import exigir_pode_avaliar
-from app.db.models import Avaliacao, Usuario, agora_utc, Papel
+from app.db.models import Avaliacao, Papel, Usuario, agora_utc
 from app.db.session import get_db
-from app.schemas.avaliacoes import AvaliacaoCriar, AvaliacaoPublica
-
+from app.schemas.avaliacoes import (
+    AvaliacaoCriar,
+    AvaliacaoPublica,
+    ConfirmarAvaliacao,
+)
 
 router = APIRouter(
     prefix="/avaliacoes",
@@ -24,43 +34,49 @@ router = APIRouter(
 )
 
 
-def calcular_nota(itens: list) -> float:
-    """
-    Calcula a média das notas dos itens.
-
-    Cada item recebe uma nota de 1 a 5.
-    A nota final é a média dos itens.
-    """
-
-    if not itens:
-        raise HTTPException(
-            status_code=400,
-            detail="A avaliação precisa ter pelo menos um item.",
-        )
-
-    notas = [item.nota for item in itens]
-
-    return round(sum(notas) / len(notas), 2)
+def _resolver_instrumento(codigo: str):
+    try:
+        return obter_instrumento(codigo)
+    except InstrumentoDesconhecido as erro:
+        raise HTTPException(status_code=400, detail=str(erro)) from None
 
 
-def validar_instrumento(instrumento: str) -> None:
-    instrumentos_permitidos = {
-        "zwisch",
-        "setq_smart",
+def _montar_resposta(avaliacao: Avaliacao) -> dict:
+    instrumento = obter_instrumento(avaliacao.instrumento)
+
+    return {
+        "id": avaliacao.id,
+        "residente_id": avaliacao.residente_id,
+        "avaliador_id": avaliacao.avaliador_id,
+        "instrumento": avaliacao.instrumento,
+        "instrumento_nome": instrumento.nome,
+        "itens": json.loads(avaliacao.itens),
+        "observacoes": avaliacao.observacoes,
+        "nota": avaliacao.nota,
+        "agregacao": instrumento.agregacao,
+        "total_minimo": instrumento.total_minimo,
+        "total_maximo": instrumento.total_maximo,
+        "faixa_rotulo": avaliacao.faixa_rotulo,
+        "faixa_descricao": next(
+            (
+                f.descricao
+                for f in instrumento.faixas
+                if f.rotulo == avaliacao.faixa_rotulo
+            ),
+            None,
+        ),
+        "confirmado": avaliacao.confirmado,
+        "hash_integridade": avaliacao.hash_integridade,
+        "declaracao_observacao": avaliacao.declaracao_observacao,
+        "confirmado_em": avaliacao.confirmado_em,
     }
-
-    if instrumento not in instrumentos_permitidos:
-        raise HTTPException(
-            status_code=400,
-            detail="Instrumento de avaliação inválido.",
-        )
 
 
 @router.post(
     "",
     response_model=AvaliacaoPublica,
     status_code=status.HTTP_201_CREATED,
-    summary="Criar avaliação",
+    summary="Criar avaliação (rascunho, ainda não enviada)",
 )
 def criar_avaliacao(
     dados: AvaliacaoCriar,
@@ -68,15 +84,26 @@ def criar_avaliacao(
     avaliador: SomenteAvaliador,
     db: Annotated[Session, Depends(get_db)],
 ):
-    validar_instrumento(dados.instrumento)
+    instrumento = _resolver_instrumento(dados.instrumento)
+
+    if instrumento.anonimo:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"O {instrumento.nome} é preenchido pelo residente sobre o "
+                "preceptor e exige fluxo anonimizado próprio. Não use esta rota."
+            ),
+        )
+
+    try:
+        validar_itens(instrumento, dados.itens)
+    except ItensInvalidos as erro:
+        raise HTTPException(status_code=422, detail=str(erro)) from None
 
     residente = db.get(Usuario, dados.residente_id)
 
     if residente is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Residente não encontrado.",
-        )
+        raise HTTPException(status_code=404, detail="Residente não encontrado.")
 
     if residente.papel != Papel.RESIDENTE:
         raise HTTPException(
@@ -86,26 +113,20 @@ def criar_avaliacao(
 
     exigir_pode_avaliar(avaliador, residente)
 
-    nota = calcular_nota(dados.itens)
+    resultado = calcular_resultado(instrumento, dados.itens)
 
     itens_json = [
-        {
-            "item": item.item,
-            "nota": item.nota,
-        }
-        for item in dados.itens
+        {"dominio": item.dominio, "nota": item.nota} for item in dados.itens
     ]
 
     avaliacao = Avaliacao(
         residente_id=residente.id,
         avaliador_id=avaliador.id,
-        instrumento=dados.instrumento,
-        itens=json.dumps(
-            itens_json,
-            ensure_ascii=False,
-        ),
+        instrumento=instrumento.codigo,
+        itens=json.dumps(itens_json, ensure_ascii=False),
         observacoes=dados.observacoes,
-        nota=nota,
+        nota=resultado.valor,
+        faixa_rotulo=resultado.faixa_rotulo,
         confirmado=False,
     )
 
@@ -121,9 +142,10 @@ def criar_avaliacao(
         entidade="avaliacoes",
         entidade_id=avaliacao.id,
         detalhe={
-            "instrumento": dados.instrumento,
+            "instrumento": instrumento.codigo,
             "residente_id": str(residente.id),
-            "nota_calculada": nota,
+            "nota_calculada": resultado.valor,
+            "faixa": resultado.faixa_rotulo,
         },
         ip_origem=ip,
     )
@@ -131,37 +153,34 @@ def criar_avaliacao(
     db.commit()
     db.refresh(avaliacao)
 
-    return {
-        "id": avaliacao.id,
-        "residente_id": avaliacao.residente_id,
-        "avaliador_id": avaliacao.avaliador_id,
-        "instrumento": avaliacao.instrumento,
-        "itens": itens_json,
-        "observacoes": avaliacao.observacoes,
-        "nota": avaliacao.nota,
-        "confirmado": avaliacao.confirmado,
-        "hash_integridade": avaliacao.hash_integridade,
-    }
+    return _montar_resposta(avaliacao)
 
 
 @router.post(
     "/{avaliacao_id}/confirmar",
     response_model=AvaliacaoPublica,
-    summary="Confirmar envio da avaliação",
+    summary="Confirmar envio da avaliação (torna o registro imutável)",
 )
 def confirmar_avaliacao(
     avaliacao_id: uuid.UUID,
+    corpo: ConfirmarAvaliacao,
     request: Request,
     avaliador: SomenteAvaliador,
     db: Annotated[Session, Depends(get_db)],
 ):
+    if not corpo.confirmo_observacao_direta:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "É obrigatório declarar a observação direta para enviar a "
+                f'avaliação: "{DECLARACAO_OBSERVACAO_DIRETA}"'
+            ),
+        )
+
     avaliacao = db.get(Avaliacao, avaliacao_id)
 
     if avaliacao is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Avaliação não encontrada.",
-        )
+        raise HTTPException(status_code=404, detail="Avaliação não encontrada.")
 
     if avaliacao.avaliador_id != avaliador.id:
         raise HTTPException(
@@ -174,12 +193,11 @@ def confirmar_avaliacao(
     residente = db.get(Usuario, avaliacao.residente_id)
 
     if residente is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Residente não encontrado.",
-        )
+        raise HTTPException(status_code=404, detail="Residente não encontrado.")
 
     exigir_pode_avaliar(avaliador, residente)
+
+    avaliacao.declaracao_observacao = DECLARACAO_OBSERVACAO_DIRETA
 
     ip = request.client.host if request.client else None
 
@@ -191,6 +209,8 @@ def confirmar_avaliacao(
         "itens": avaliacao.itens,
         "observacoes": avaliacao.observacoes,
         "nota": avaliacao.nota,
+        "faixa_rotulo": avaliacao.faixa_rotulo,
+        "declaracao_observacao": avaliacao.declaracao_observacao,
     }
 
     confirmar_registro(
@@ -213,6 +233,8 @@ def confirmar_avaliacao(
         detalhe={
             "instrumento": avaliacao.instrumento,
             "nota": avaliacao.nota,
+            "faixa": avaliacao.faixa_rotulo,
+            "declaracao": DECLARACAO_OBSERVACAO_DIRETA,
         },
         ip_origem=ip,
     )
@@ -220,17 +242,7 @@ def confirmar_avaliacao(
     db.commit()
     db.refresh(avaliacao)
 
-    return {
-        "id": avaliacao.id,
-        "residente_id": avaliacao.residente_id,
-        "avaliador_id": avaliacao.avaliador_id,
-        "instrumento": avaliacao.instrumento,
-        "itens": json.loads(avaliacao.itens),
-        "observacoes": avaliacao.observacoes,
-        "nota": avaliacao.nota,
-        "confirmado": avaliacao.confirmado,
-        "hash_integridade": avaliacao.hash_integridade,
-    }
+    return _montar_resposta(avaliacao)
 
 
 @router.get(
@@ -246,10 +258,7 @@ def buscar_avaliacao(
     avaliacao = db.get(Avaliacao, avaliacao_id)
 
     if avaliacao is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Avaliação não encontrada.",
-        )
+        raise HTTPException(status_code=404, detail="Avaliação não encontrada.")
 
     if (
         usuario.id != avaliacao.avaliador_id
@@ -261,14 +270,10 @@ def buscar_avaliacao(
             detail="Você não tem acesso a esta avaliação.",
         )
 
-    return {
-        "id": avaliacao.id,
-        "residente_id": avaliacao.residente_id,
-        "avaliador_id": avaliacao.avaliador_id,
-        "instrumento": avaliacao.instrumento,
-        "itens": json.loads(avaliacao.itens),
-        "observacoes": avaliacao.observacoes,
-        "nota": avaliacao.nota,
-        "confirmado": avaliacao.confirmado,
-        "hash_integridade": avaliacao.hash_integridade,
-    }
+    if usuario.id == avaliacao.residente_id and not avaliacao.confirmado:
+        raise HTTPException(
+            status_code=403,
+            detail="Esta avaliação ainda não foi enviada pelo avaliador.",
+        )
+
+    return _montar_resposta(avaliacao)
