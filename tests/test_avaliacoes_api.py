@@ -146,7 +146,7 @@ def test_recusa_instrumento_inexistente(ambiente):
 def test_recusa_setq_nesta_rota(ambiente):
     r = _criar(ambiente["cliente"], ambiente["residente"], "setq_smart", 4)
     assert r.status_code == 400
-    assert "anonimizado" in r.json()["detail"]
+    assert "/avaliacoes/setq" in r.json()["detail"]
 
 
 # --------------------------------------------------------------------------
@@ -160,7 +160,7 @@ def test_confirmacao_exige_declaracao(ambiente):
         json={"confirmo_observacao_direta": False},
     )
     assert r.status_code == 422
-    assert "observação direta" in r.json()["detail"]
+    assert "observei este residente pessoalmente" in r.json()["detail"]
 
 
 def test_confirmacao_grava_declaracao_e_hash(ambiente):

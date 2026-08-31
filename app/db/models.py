@@ -135,6 +135,10 @@ class Avaliacao(Base):
         default=uuid.uuid4,
     )
 
+    # Em todo instrumento, exceto SETQ Smart: residente_id é quem é avaliado,
+    # avaliador_id é quem preenche. No SETQ o sentido inverte (residente
+    # preenche sobre o preceptor) para reaproveitar a mesma tabela e o mesmo
+    # mecanismo de hash/imutabilidade — ver app.api.routes.setq.
     residente_id: Mapped[uuid.UUID] = mapped_column(
         Uuid,
         ForeignKey("usuarios.id"),
@@ -161,6 +165,13 @@ class Avaliacao(Base):
         Text,
         nullable=False,
         default="",
+    )
+
+    # Só usada quando instrumento == "zwisch": a Zwisch não soma domínios,
+    # é um nível de autonomia por etapa cirúrgica (ver app.core.instrumentos).
+    etapa_cirurgica: Mapped[str | None] = mapped_column(
+        String(200),
+        nullable=True,
     )
 
     nota: Mapped[float] = mapped_column(

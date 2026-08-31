@@ -10,14 +10,16 @@ Como adicionar/ajustar um instrumento:
     2. Não mexa em mais nada. Rota, validação e cálculo já leem do registro.
 
 Estado por instrumento (Sprint 2):
-    osats       — COMPLETO (frente A)
-    mini_cex    — COMPLETO (frente A)
+    osats       — COMPLETO
+    mini_cex    — COMPLETO
     notss       — escala e domínios preenchidos a partir do documento técnico;
-                  descritores comportamentais e faixas de corte pendentes (frente B)
-    zwisch      — estrutura provisória; NÃO é soma de domínios, é um nível por
-                  etapa cirúrgica. Precisa de modelagem própria (frente B)
-    setq_smart  — escala e domínios preenchidos; anonimização e agregação
-                  mínima de 3 residentes pendentes (frente C)
+                  descritores comportamentais e faixas de corte pendentes —
+                  falta dado clínico de origem, não é lacuna de código
+    zwisch      — COMPLETO. Não é soma de domínios: uma avaliação = uma etapa
+                  cirúrgica + um nível Z1–Z4 (`validar_zwisch`/`resultado_zwisch`)
+    setq_smart  — COMPLETO. Fluxo invertido (residente avalia preceptor),
+                  anonimizado, com agregação mínima de 3 residentes (COI-03)
+                  via `POST /avaliacoes/setq` e `GET /avaliacoes/setq/resumo`
 
 Referência: RMS-Brasil, Documento Técnico v3.2, Parte VI.
 """
@@ -33,6 +35,12 @@ class InstrumentoDesconhecido(ValueError):
 
 class ItensInvalidos(ValueError):
     """Os itens enviados não batem com a definição do instrumento."""
+
+
+DECLARACAO_OBSERVACAO_DIRETA = (
+    "Confirmo que observei este residente pessoalmente nesta atividade "
+    "na data informada."
+)
 
 
 @dataclass(frozen=True)
@@ -70,6 +78,7 @@ class Instrumento:
     anonimo: bool = False
     observacao_interna: str = ""
     ancora_escala: dict[int, str] = field(default_factory=dict)
+    texto_confirmacao: str = DECLARACAO_OBSERVACAO_DIRETA
 
     @property
     def total_minimo(self) -> int:
@@ -248,7 +257,7 @@ NOTSS = Instrumento(
 
 
 # ---------------------------------------------------------------------------
-# Zwisch — frente B (NÃO é soma de domínios; ver observação)
+# Zwisch — NÃO é soma de domínios: um nível por etapa cirúrgica
 # ---------------------------------------------------------------------------
 ZWISCH = Instrumento(
     codigo="zwisch",
@@ -266,10 +275,10 @@ ZWISCH = Instrumento(
     dominios=(),
     faixas=(),
     observacao_interna=(
-        "ATENÇÃO (frente B): a Zwisch NÃO produz score somado. Ela registra um "
-        "NÍVEL por ETAPA CIRÚRGICA. A estrutura atual aceita itens livres apenas "
-        "para não quebrar o que já existia — precisa de modelagem própria "
-        "(campo de etapa, sem soma). Decisão de design da frente B."
+        "Cada avaliação Zwisch cobre uma etapa cirúrgica: o preceptor registra "
+        "o nível de autonomia (Z1–Z4) observado naquela etapa, não uma soma de "
+        "domínios. Um mesmo procedimento pode gerar várias avaliações Zwisch, "
+        "uma por etapa. Ver `validar_zwisch`/`resultado_zwisch` neste módulo."
     ),
 )
 
@@ -292,11 +301,15 @@ SETQ_SMART = Instrumento(
         Dominio("profissionalismo", "Profissionalismo"),
     ),
     faixas=(),
+    texto_confirmacao=(
+        "Confirmo que esta avaliação reflete minha experiência genuína com "
+        "este preceptor."
+    ),
     observacao_interna=(
-        "PENDENTE (frente C): este instrumento inverte o sentido da avaliação — "
-        "o RESIDENTE avalia o PRECEPTOR. A rota atual assume avaliador→residente "
-        "e por isso NÃO atende o SETQ. Exige também agregação mínima de 3 "
-        "residentes e anonimização (regra COI-03)."
+        "Inverte o sentido da avaliação — o RESIDENTE avalia o PRECEPTOR, "
+        "via `POST /avaliacoes/setq`. O resultado só fica visível ao preceptor "
+        "de forma agregada e anônima, a partir de 3 residentes (regra COI-03) "
+        "— ver `GET /avaliacoes/setq/resumo/{preceptor_id}`."
     ),
 )
 
@@ -408,7 +421,28 @@ def calcular_resultado(instrumento: Instrumento, itens: list) -> Resultado:
     )
 
 
-DECLARACAO_OBSERVACAO_DIRETA = (
-    "Confirmo que observei este residente pessoalmente nesta atividade "
-    "na data informada."
-)
+def validar_zwisch(instrumento: Instrumento, etapa_cirurgica: str | None, nivel: int | None) -> None:
+    """Zwisch não usa `validar_itens` — é etapa + nível, não domínio + soma."""
+    if not etapa_cirurgica or not etapa_cirurgica.strip():
+        raise ItensInvalidos("A Zwisch exige a etapa cirúrgica observada.")
+
+    if nivel is None:
+        raise ItensInvalidos("A Zwisch exige o nível de autonomia (Z1 a Z4).")
+
+    if not (instrumento.escala_min <= nivel <= instrumento.escala_max):
+        raise ItensInvalidos(
+            f"Nível {nivel} fora da escala da Zwisch: "
+            f"{instrumento.escala_min} a {instrumento.escala_max}."
+        )
+
+
+def resultado_zwisch(instrumento: Instrumento, nivel: int) -> Resultado:
+    """O 'resultado' da Zwisch é o próprio nível declarado — não há soma."""
+    return Resultado(
+        valor=float(nivel),
+        agregacao=instrumento.agregacao,
+        total_minimo=instrumento.escala_min,
+        total_maximo=instrumento.escala_max,
+        faixa_rotulo=f"Z{nivel}",
+        faixa_descricao=instrumento.ancora_escala.get(nivel),
+    )

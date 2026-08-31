@@ -21,8 +21,13 @@ class ItemAvaliacao(BaseModel):
 class AvaliacaoCriar(BaseModel):
     residente_id: uuid.UUID
     instrumento: str = Field(min_length=1)
-    itens: list[ItemAvaliacao] = Field(min_length=1)
+    itens: list[ItemAvaliacao] = Field(default_factory=list)
     observacoes: str = ""
+
+    # Só usados quando instrumento == "zwisch" — ela não usa `itens`
+    # (ver app.core.instrumentos.validar_zwisch).
+    etapa_cirurgica: str | None = None
+    nivel_autonomia: int | None = None
 
 
 class ConfirmarAvaliacao(BaseModel):
@@ -54,12 +59,30 @@ class AvaliacaoPublica(BaseModel):
     total_maximo: int
     faixa_rotulo: str | None = None
     faixa_descricao: str | None = None
+    etapa_cirurgica: str | None = None
     confirmado: bool
     hash_integridade: str | None = None
     declaracao_observacao: str | None = None
     confirmado_em: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class SetqCriar(BaseModel):
+    """SETQ Smart: o residente preenche sobre o preceptor (fluxo invertido)."""
+
+    preceptor_id: uuid.UUID
+    itens: list[ItemAvaliacao] = Field(min_length=1)
+    observacoes: str = ""
+
+
+class SetqResumoPublico(BaseModel):
+    """Resumo agregado e anônimo — nunca carrega dado por residente."""
+
+    preceptor_id: uuid.UUID
+    total_respostas: int
+    disponivel: bool
+    media_por_dominio: dict[str, float] | None = None
 
 
 class DominioPublico(BaseModel):
