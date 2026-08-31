@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Entrar — Residência Médica</title>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:wght@500;600&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="tela-login">
+  <div class="cracha">
+    <div class="carta">
+      <div class="faixa">
+        <p class="instituicao">Programa de Residência Médica</p>
+        <h1 class="titulo">Entrar no sistema</h1>
+      </div>
+      <div class="miolo">
+        <p class="erro" id="erro"></p>
+        <div class="campo">
+          <label for="email">Email institucional</label>
+          <input id="email" type="email" autocomplete="username" />
+        </div>
+        <div class="campo">
+          <label for="senha">Senha</label>
+          <input id="senha" type="password" autocomplete="current-password" />
+        </div>
+        <button class="entrar" id="botao" onclick="entrar()">Entrar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const API = "http://localhost:8000/api/v1";
+
+  async function entrar() {
+    const email = document.getElementById("email").value.trim();
+    const senha = document.getElementById("senha").value;
+    const erroEl = document.getElementById("erro");
+    const botao = document.getElementById("botao");
+    erroEl.style.display = "none";
+
+    if (!email || !senha) {
+      erroEl.textContent = "Preencha o email e a senha para entrar.";
+      erroEl.style.display = "block";
+      return;
+    }
+
+    botao.disabled = true;
+    botao.textContent = "Entrando…";
+
+    try {
+      const resposta = await fetch(`${API}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, senha }),
+      });
+
+      if (resposta.status === 401) {
+        erroEl.textContent = "Email ou senha incorretos. Confira e tente de novo.";
+        erroEl.style.display = "block";
+        return;
+      }
+      if (!resposta.ok) {
+        erroEl.textContent = "O sistema não respondeu. Tente novamente em instantes.";
+        erroEl.style.display = "block";
+        return;
+      }
+
+      const dados = await resposta.json();
+
+      // Base simples: sessão fica em sessionStorage (some ao fechar a aba).
+      // Isso é uma simplificação do protótipo — numa versão de produção
+      // o ideal é um cookie httpOnly emitido pelo próprio backend.
+      sessionStorage.setItem("sessao", JSON.stringify(dados));
+      window.location.href = "dashboard.html";
+    } catch (e) {
+      erroEl.textContent = "Sem conexão com o servidor. Verifique sua internet.";
+      erroEl.style.display = "block";
+    } finally {
+      botao.disabled = false;
+      botao.textContent = "Entrar";
+    }
+  }
+
+  document.getElementById("senha").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") entrar();
+  });
+</script>
+</body>
+</html>

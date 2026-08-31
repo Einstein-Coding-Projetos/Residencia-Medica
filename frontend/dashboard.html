@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Painel — Residência Médica</title>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:wght@500;600&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="painel">
+  <nav class="lateral" id="lateral">
+    <p class="marca">Residência Médica</p>
+    <p class="subtitulo">Sistema de gestão</p>
+    <div id="itensNav"></div>
+  </nav>
+
+  <div class="conteudo">
+    <header class="topo">
+      <h1 id="tituloSecao">Painel</h1>
+      <div class="crachazinho">
+        <div class="quem">
+          <p class="nome" id="nomeUsuario"></p>
+          <p class="papel" id="papelUsuario"></p>
+        </div>
+        <button class="sair" onclick="sair()">Sair</button>
+      </div>
+    </header>
+
+    <main class="corpo-painel">
+      <div class="grade-cartoes" id="grade"></div>
+    </main>
+  </div>
+</div>
+
+<script>
+  const ROTULOS_PAPEL = {
+    residente: "Residente",
+    preceptor: "Preceptor",
+    avaliador_intermediario: "Avaliador R4/R5",
+    administrador: "Administrador",
+  };
+
+  // Base do painel: cada papel enxerga só as seções que fazem sentido
+  // para ele. Os cartões ainda são placeholder — as telas de verdade
+  // (fichas de avaliação, portfólio, etc.) chegam nos próximos sprints.
+  const SECOES_POR_PAPEL = {
+    residente: [
+      { titulo: "Portfólio", descricao: "Cirurgias, trabalhos e progressão por EPA." },
+      { titulo: "Avaliações recebidas", descricao: "Feedback dos seus preceptores." },
+      { titulo: "Frequência", descricao: "Check-in e check-out do dia." },
+    ],
+    preceptor: [
+      { titulo: "Avaliações a aplicar", descricao: "Prazos e residentes pendentes de avaliação." },
+      { titulo: "Meus residentes", descricao: "Residentes do seu programa." },
+    ],
+    avaliador_intermediario: [
+      { titulo: "Avaliações a aplicar", descricao: "Prazos e residentes pendentes de avaliação." },
+      { titulo: "Meus residentes", descricao: "Residentes do seu programa." },
+    ],
+    administrador: [
+      { titulo: "Cadastros", descricao: "Programas, especialidades e serviços." },
+      { titulo: "Usuários", descricao: "Contas de residentes, preceptores e administradores." },
+      { titulo: "Auditoria", descricao: "Trilha de ações registradas no sistema." },
+    ],
+  };
+
+  function carregarSessao() {
+    const bruto = sessionStorage.getItem("sessao");
+    if (!bruto) {
+      window.location.href = "login.html";
+      return null;
+    }
+    return JSON.parse(bruto);
+  }
+
+  function sair() {
+    sessionStorage.removeItem("sessao");
+    window.location.href = "login.html";
+  }
+
+  function montarPainel() {
+    const sessao = carregarSessao();
+    if (!sessao) return;
+
+    const { usuario } = sessao;
+    document.getElementById("nomeUsuario").textContent = usuario.nome;
+    document.getElementById("papelUsuario").textContent =
+      ROTULOS_PAPEL[usuario.papel] ?? usuario.papel;
+
+    const secoes = SECOES_POR_PAPEL[usuario.papel] ?? [];
+
+    const nav = document.getElementById("itensNav");
+    secoes.forEach((secao, i) => {
+      const botao = document.createElement("button");
+      botao.className = "nav-item" + (i === 0 ? " ativo" : "");
+      botao.textContent = secao.titulo;
+      botao.onclick = () => selecionar(i);
+      nav.appendChild(botao);
+    });
+
+    window._secoes = secoes;
+    selecionar(0);
+  }
+
+  function selecionar(indice) {
+    const secoes = window._secoes;
+    document.querySelectorAll(".nav-item").forEach((el, i) => {
+      el.classList.toggle("ativo", i === indice);
+    });
+    document.getElementById("tituloSecao").textContent = secoes[indice].titulo;
+
+    const grade = document.getElementById("grade");
+    grade.innerHTML = "";
+    const cartao = document.createElement("div");
+    cartao.className = "cartao";
+    cartao.innerHTML = `<h3>${secoes[indice].titulo}</h3><p>${secoes[indice].descricao} — disponível em um próximo sprint.</p>`;
+    grade.appendChild(cartao);
+  }
+
+  montarPainel();
+</script>
+</body>
+</html>
