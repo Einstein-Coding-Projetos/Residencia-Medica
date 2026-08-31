@@ -107,6 +107,24 @@ class Usuario(Base):
         return f"<Usuario {self.email} ({self.papel.value})>"
 
 
+class Avaliacao(Base):
+    """Ficha de avaliação de um residente por um preceptor/avaliador R4-R5."""
+
+    __tablename__ = "avaliacoes"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    residente_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("usuarios.id"), nullable=False)
+    avaliador_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("usuarios.id"), nullable=False)
+    instrumento: Mapped[str] = mapped_column(String(40), nullable=False)
+    itens: Mapped[str] = mapped_column(Text, nullable=False)
+    observacoes: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    nota: Mapped[float] = mapped_column(nullable=False)
+    confirmado: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    confirmado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    hash_integridade: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
+
+
 class LogAuditoria(Base):
     __tablename__ = "log_auditoria"
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from datetime import datetime
 from typing import Annotated
 
@@ -149,7 +150,7 @@ def criar_avaliacao(
     summary="Confirmar envio da avaliação",
 )
 def confirmar_avaliacao(
-    avaliacao_id: str,
+    avaliacao_id: uuid.UUID,
     request: Request,
     avaliador: SomenteAvaliador,
     db: Annotated[Session, Depends(get_db)],
@@ -238,7 +239,7 @@ def confirmar_avaliacao(
     summary="Consultar avaliação",
 )
 def buscar_avaliacao(
-    avaliacao_id: str,
+    avaliacao_id: uuid.UUID,
     usuario: UsuarioAtual,
     db: Annotated[Session, Depends(get_db)],
 ):
