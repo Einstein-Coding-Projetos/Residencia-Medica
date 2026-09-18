@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import (
     auth,
     avaliacoes,
+    epas,
     especialidades,
     instrumentos,
     programas,
@@ -43,6 +44,7 @@ app.include_router(programas.router, prefix=settings.API_PREFIX)
 app.include_router(servicos.router, prefix=settings.API_PREFIX)
 app.include_router(usuarios.router, prefix=settings.API_PREFIX)
 app.include_router(instrumentos.router, prefix=settings.API_PREFIX)
+app.include_router(epas.router, prefix=settings.API_PREFIX)
 
 
 @app.get("/saude", tags=["infra"])
