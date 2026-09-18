@@ -63,6 +63,61 @@ class Programa(Base):
     especialidade: Mapped["Especialidade"] = relationship(back_populates="programas")
     usuarios: Mapped[list["Usuario"]] = relationship(back_populates="programa")
     servicos: Mapped[list["Servico"]] = relationship(back_populates="programa")
+    epas: Mapped[list["EPA"]] = relationship(back_populates="programa")
+    
+class EPA(Base):
+    """Atividade Profissional Confiável vinculada a um programa de residência."""
+
+    __tablename__ = "epas"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+
+    codigo: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+    )
+
+    titulo: Mapped[str] = mapped_column(
+        String(300),
+        nullable=False,
+    )
+
+    programa_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("programas.id"),
+        nullable=False,
+    )
+
+    nivel_r1: Mapped[int] = mapped_column(
+        nullable=False,
+    )
+
+    nivel_r2: Mapped[int] = mapped_column(
+        nullable=False,
+    )
+
+    nivel_r3: Mapped[int] = mapped_column(
+        nullable=False,
+    )
+
+    ativo: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+    )
+
+    criado_em: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=agora_utc,
+    )
+
+    programa: Mapped["Programa"] = relationship(
+        back_populates="epas"
+    )
 
 
 class Servico(Base):
