@@ -49,3 +49,25 @@ class ServicoPublico(BaseModel):
     nome: str
     programa_id: uuid.UUID
     ativo: bool
+
+class EPACreate(BaseModel):
+    codigo: str = Field(min_length=2, max_length=20)
+    titulo: str = Field(min_length=3, max_length=300)
+    programa_id: uuid.UUID
+
+    nivel_r1: int = Field(ge=1, le=5)
+    nivel_r2: int = Field(ge=1, le=5)
+    nivel_r3: int = Field(ge=1, le=5)
+
+
+class EPAPublico(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    codigo: str
+    titulo: str
+    programa_id: uuid.UUID
+    nivel_r1: int
+    nivel_r2: int
+    nivel_r3: int
+    ativo: bool
