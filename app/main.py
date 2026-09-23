@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import auth, especialidades, programas, servicos, usuarios
+from app.api.routes import auth, epas, especialidades, programas, servicos, usuarios
 from app.core.config import settings
 from app.db.models import Base
 from app.db.session import engine
@@ -28,6 +28,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(epas.router, prefix=settings.API_PREFIX)
 app.include_router(auth.router, prefix=settings.API_PREFIX)
 app.include_router(especialidades.router, prefix=settings.API_PREFIX)
 app.include_router(programas.router, prefix=settings.API_PREFIX)

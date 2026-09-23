@@ -6,7 +6,7 @@ import json
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, Text, Uuid
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint, Uuid
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -29,12 +29,6 @@ PAPEIS_AVALIADORES = frozenset({Papel.PRECEPTOR, Papel.AVALIADOR_INTERMEDIARIO})
 
 
 class Especialidade(Base):
-    """A área médica em si (ex.: Cirurgia Geral, Cirurgia de Cabeça e Pescoço).
-
-    Separada de Programa porque a mesma especialidade pode existir em
-    mais de um programa/instituição.
-    """
-
     __tablename__ = "especialidades"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
@@ -43,11 +37,10 @@ class Especialidade(Base):
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
 
     programas: Mapped[list["Programa"]] = relationship(back_populates="especialidade")
+    epas: Mapped[list["EPA"]] = relationship(back_populates="especialidade")
 
 
 class Programa(Base):
-    """O 'onde': ex. Residência em Cirurgia Geral no Hospital X."""
-
     __tablename__ = "programas"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
@@ -66,9 +59,6 @@ class Programa(Base):
 
 
 class Servico(Base):
-    """O setor dentro do hospital (ex.: Enfermaria, Ambulatório, Centro
-    Cirúrgico) onde o residente atua no dia a dia. Vinculado a um Programa."""
-
     __tablename__ = "servicos"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
@@ -105,6 +95,55 @@ class Usuario(Base):
 
     def __repr__(self) -> str:
         return f"<Usuario {self.email} ({self.papel.value})>"
+
+
+class EPA(Base):
+    """Atividade Profissional Confiável (Entrustable Professional Activity).
+
+    O nível esperado varia por ano de residência (R1/R2/R3) — a mesma EPA
+    se repete nos três anos, só muda o quanto de autonomia se espera do
+    residente. Ver Ten Cate / Quadro 1 do currículo de referência.
+    """
+
+    __tablename__ = "epas"
+    __table_args__ = (UniqueConstraint("especialidade_id", "numero", name="uq_epa_numero_especialidade"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    especialidade_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("especialidades.id"), nullable=False
+    )
+    numero: Mapped[int] = mapped_column(Integer, nullable=False)
+    nome: Mapped[str] = mapped_column(String(220), nullable=False)
+
+    nivel_esperado_r1: Mapped[int] = mapped_column(Integer, nullable=False)
+    nivel_esperado_r2: Mapped[int] = mapped_column(Integer, nullable=False)
+    nivel_esperado_r3: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    ativo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
+
+    especialidade: Mapped["Especialidade"] = relationship(back_populates="epas")
+
+
+class ProgressoEPA(Base):
+    """Nível atual de um residente numa EPA específica.
+
+    Atualizado por um avaliador (preceptor/R4-R5) conforme observa o
+    residente. Uma linha por par (residente, EPA) — o histórico de como
+    se chegou ali fica na trilha de auditoria, não aqui.
+    """
+
+    __tablename__ = "progresso_epa"
+    __table_args__ = (UniqueConstraint("residente_id", "epa_id", name="uq_progresso_residente_epa"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    residente_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("usuarios.id"), nullable=False)
+    epa_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("epas.id"), nullable=False)
+
+    nivel_atual: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+    atualizado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc, onupdate=agora_utc)
+    atualizado_por: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("usuarios.id"), nullable=True)
 
 
 class LogAuditoria(Base):
