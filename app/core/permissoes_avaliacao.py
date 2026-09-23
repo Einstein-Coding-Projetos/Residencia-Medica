@@ -37,3 +37,24 @@ def exigir_pode_avaliar(avaliador: Usuario, residente: Usuario) -> None:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Você não tem permissão para avaliar este residente.",
         )
+
+
+def pode_avaliar_setq(residente: Usuario, preceptor: Usuario) -> bool:
+    """SETQ Smart inverte a direção: só RESIDENTE avalia, sobre um avaliador."""
+    if residente.papel != Papel.RESIDENTE:
+        return False
+    if preceptor.papel not in PAPEIS_AVALIADORES:
+        return False
+    if residente.programa_id and preceptor.programa_id:
+        if residente.programa_id != preceptor.programa_id:
+            return False
+    return True
+
+
+def exigir_pode_avaliar_setq(residente: Usuario, preceptor: Usuario) -> None:
+    """Levanta 403 se `residente` não puder enviar um SETQ sobre `preceptor`."""
+    if not pode_avaliar_setq(residente, preceptor):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Você não tem permissão para avaliar este preceptor.",
+        )

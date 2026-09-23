@@ -163,3 +163,87 @@ class LogAuditoria(Base):
     def calcular_hash(payload: dict) -> str:
         canonico = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
         return hashlib.sha256(canonico.encode("utf-8")).hexdigest()
+
+
+class Avaliacao(Base):
+    __tablename__ = "avaliacoes"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+
+    # Em todo instrumento, exceto SETQ Smart: residente_id é quem é avaliado,
+    # avaliador_id é quem preenche. No SETQ o sentido inverte (residente
+    # preenche sobre o preceptor) para reaproveitar a mesma tabela e o mesmo
+    # mecanismo de hash/imutabilidade — ver app.api.routes.setq.
+    residente_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("usuarios.id"),
+        nullable=False,
+    )
+
+    avaliador_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("usuarios.id"),
+        nullable=False,
+    )
+
+    instrumento: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+    )
+
+    itens: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+    )
+
+    observacoes: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default="",
+    )
+
+    # Só usada quando instrumento == "zwisch": a Zwisch não soma domínios,
+    # é um nível de autonomia por etapa cirúrgica (ver app.core.instrumentos).
+    etapa_cirurgica: Mapped[str | None] = mapped_column(
+        String(200),
+        nullable=True,
+    )
+
+    nota: Mapped[float] = mapped_column(
+        nullable=False,
+    )
+
+    confirmado: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+    )
+
+    faixa_rotulo: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+    )
+
+    declaracao_observacao: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    hash_integridade: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+    )
+
+    criado_em: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=agora_utc,
+    )
+
+    confirmado_em: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )

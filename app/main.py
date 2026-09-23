@@ -6,7 +6,16 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import auth, epas, especialidades, programas, servicos, usuarios
+from app.api.routes import (
+    auth,
+    avaliacoes,
+    epas,
+    especialidades,
+    instrumentos,
+    programas,
+    servicos,
+    usuarios,
+)
 from app.core.config import settings
 from app.db.models import Base
 from app.db.session import engine
@@ -30,10 +39,12 @@ app.add_middleware(
 
 app.include_router(epas.router, prefix=settings.API_PREFIX)
 app.include_router(auth.router, prefix=settings.API_PREFIX)
+app.include_router(avaliacoes.router, prefix=settings.API_PREFIX)
 app.include_router(especialidades.router, prefix=settings.API_PREFIX)
 app.include_router(programas.router, prefix=settings.API_PREFIX)
 app.include_router(servicos.router, prefix=settings.API_PREFIX)
 app.include_router(usuarios.router, prefix=settings.API_PREFIX)
+app.include_router(instrumentos.router, prefix=settings.API_PREFIX)
 
 
 @app.get("/saude", tags=["infra"])
