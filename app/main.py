@@ -11,6 +11,8 @@ from app.api.routes import (
     avaliacoes,
     especialidades,
     instrumentos,
+    portfolio,
+    procedimentos,
     programas,
     servicos,
     usuarios,
@@ -34,6 +36,8 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # Sem isto o navegador esconde o nome do arquivo do PDF do portfólio.
+    expose_headers=["Content-Disposition"],
 )
 
 app.include_router(auth.router, prefix=settings.API_PREFIX)
@@ -43,6 +47,8 @@ app.include_router(programas.router, prefix=settings.API_PREFIX)
 app.include_router(servicos.router, prefix=settings.API_PREFIX)
 app.include_router(usuarios.router, prefix=settings.API_PREFIX)
 app.include_router(instrumentos.router, prefix=settings.API_PREFIX)
+app.include_router(procedimentos.router, prefix=settings.API_PREFIX)
+app.include_router(portfolio.router, prefix=settings.API_PREFIX)
 
 
 @app.get("/saude", tags=["infra"])

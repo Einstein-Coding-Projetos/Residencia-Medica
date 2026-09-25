@@ -4,9 +4,9 @@ import enum
 import hashlib
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, Text, Uuid
+from sqlalchemy import Boolean, Date, DateTime, Enum, ForeignKey, String, Text, Uuid
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -208,3 +208,58 @@ class Avaliacao(Base):
         DateTime(timezone=True),
         nullable=True,
     )
+
+
+class Procedimento(Base):
+    """Procedimento realizado pelo residente (portfólio).
+
+    Regra do documento do projeto: "trabalhos adicionados pelo residente
+    precisam de validação de um profissional antes de contar na
+    estatística". Fluxo:
+
+        residente registra  ->  status "pendente"
+        preceptor/R4-R5 do mesmo programa decide  ->  "validado" ou "recusado"
+
+    A decisão é final: gera hash de integridade e trava o registro
+    (mesmo mecanismo das avaliações). Só "validado" entra nas estatísticas
+    do portfólio.
+    """
+
+    __tablename__ = "procedimentos"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+
+    residente_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("usuarios.id"), nullable=False, index=True
+    )
+
+    nome: Mapped[str] = mapped_column(String(200), nullable=False)
+    data_realizacao: Mapped[date] = mapped_column(Date, nullable=False)
+
+    # "cirurgiao_principal" | "primeiro_auxiliar" | "segundo_auxiliar" —
+    # valores validados em app.schemas.procedimentos.
+    participacao: Mapped[str] = mapped_column(String(30), nullable=False)
+
+    servico_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("servicos.id"), nullable=True
+    )
+
+    observacoes: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+    # "pendente" | "validado" | "recusado"
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pendente")
+
+    validador_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("usuarios.id"), nullable=True
+    )
+    validado_em: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    motivo_recusa: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # `confirmado` + `hash_integridade`: mesmos nomes da Avaliacao, para
+    # reaproveitar confirmar_registro() e bloquear_se_confirmado().
+    confirmado: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    hash_integridade: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
