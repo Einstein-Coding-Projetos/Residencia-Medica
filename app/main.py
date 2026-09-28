@@ -19,6 +19,19 @@ from app.api.routes import (
 from app.core.config import settings
 from app.db.models import Base
 from app.db.session import engine
+from app.api.routes import (
+    auth,
+    avaliacoes,
+    epas,
+    especialidades,
+    instrumentos,
+    programas,
+    progresso_epa,
+    servicos,
+    usuarios,
+)
+
+
 
 
 @asynccontextmanager
@@ -45,6 +58,7 @@ app.include_router(programas.router, prefix=settings.API_PREFIX)
 app.include_router(servicos.router, prefix=settings.API_PREFIX)
 app.include_router(usuarios.router, prefix=settings.API_PREFIX)
 app.include_router(instrumentos.router, prefix=settings.API_PREFIX)
+app.include_router(progresso_epa.router, prefix=settings.API_PREFIX)
 
 
 @app.get("/saude", tags=["infra"])

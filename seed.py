@@ -15,6 +15,27 @@ CONTAS = [
     ("Carla Menezes", "carla@hospital.br", Papel.ADMINISTRADOR),
 ]
 
+# 16 EPAs de Cirurgia Geral — fonte: Cadernos da Residência Médica,
+# Vol. 1 (Santa Casa de BH, 2022), Quadro 1, revisão 2021.
+EPAS_CIRURGIA_GERAL = [
+    ("CG-01", "Admitindo o paciente cirúrgico", 2, 3, 5),
+    ("CG-02", "Cuidando do paciente em pré-operatório", 2, 3, 5),
+    ("CG-03", "Cuidando do paciente em pós-operatório", 2, 3, 5),
+    ("CG-04", "Cuidando do paciente cirúrgico crítico", 2, 3, 3),
+    ("CG-05", "Tratando cirurgicamente o paciente com defeito na parede abdominal", 2, 3, 3),
+    ("CG-06", "Acessando a cavidade abdominal do paciente cirúrgico", 2, 3, 3),
+    ("CG-07", "Tratando do paciente com apendicite aguda", 2, 3, 3),
+    ("CG-08", "Abordando cirurgicamente o paciente para via nutricional alternativa", 2, 3, 3),
+    ("CG-09", "Tratando pacientes com colecistopatia", 1, 2, 3),
+    ("CG-10", "Abordando o paciente em urgência cirúrgica", 1, 2, 3),
+    ("CG-11", "Abordando cirurgicamente o paciente com câncer do aparelho digestivo", 1, 2, 3),
+    ("CG-12", "Abordando o paciente para cateterizações e sondagens", 3, 4, 5),
+    ("CG-13", "Abordando o paciente para acesso venoso central/dissecção venosa", 3, 4, 5),
+    ("CG-14", "Abordando o paciente para pequenos procedimentos cirúrgicos", 3, 4, 5),
+    ("CG-15", "Abordando cirurgicamente o paciente com obesidade mórbida", 1, 2, 3),
+    ("CG-16", "Realizando a gestão da excelência do cuidado em cirurgia geral", 2, 3, 4),
+]
+
 
 def main() -> None:
     Base.metadata.create_all(bind=engine)
@@ -43,57 +64,18 @@ def main() -> None:
             db.add(Servico(nome="Centro Cirúrgico", programa_id=programa.id))
             db.flush()
 
-        # 16 EPAs de Cirurgia Geral — fonte: Cadernos da Residência Médica,
-        # Vol. 1 (Santa Casa de BH, 2022), Quadro 1, revisão 2021.
-        epas_cirurgia_geral = [
-            (1, "Admitindo o paciente cirúrgico", 2, 3, 5),
-            (2, "Cuidando do paciente em pré-operatório", 2, 3, 5),
-            (3, "Cuidando do paciente em pós-operatório", 2, 3, 5),
-            (4, "Cuidando do paciente cirúrgico crítico", 2, 3, 3),
-            (5, "Tratando cirurgicamente o paciente com defeito na parede abdominal", 2, 3, 3),
-            (6, "Acessando a cavidade abdominal do paciente cirúrgico", 2, 3, 3),
-            (7, "Tratando do paciente com apendicite aguda", 2, 3, 3),
-            (8, "Abordando cirurgicamente o paciente para via nutricional alternativa", 2, 3, 3),
-            (9, "Tratando pacientes com colecistopatia", 1, 2, 3),
-            (10, "Abordando o paciente em urgência cirúrgica", 1, 2, 3),
-            (11, "Abordando cirurgicamente o paciente com câncer do aparelho digestivo", 1, 2, 3),
-            (12, "Abordando o paciente para cateterizações e sondagens", 3, 4, 5),
-            (13, "Abordando o paciente para acesso venoso central/dissecção venosa", 3, 4, 5),
-            (14, "Abordando o paciente para pequenos procedimentos cirúrgicos", 3, 4, 5),
-            (15, "Abordando cirurgicamente o paciente com obesidade mórbida", 1, 2, 3),
-            (16, "Realizando a gestão da excelência do cuidado em cirurgia geral", 2, 3, 4),
-        ]
-        if db.scalar(select(EPA).where(EPA.especialidade_id == especialidade.id)) is None:
-            for numero, nome, r1, r2, r3 in epas_cirurgia_geral:
-                db.add(EPA(
-                    especialidade_id=especialidade.id,
-                    numero=numero,
-                    nome=nome,
-                    nivel_esperado_r1=r1,
-                    nivel_esperado_r2=r2,
-                    nivel_esperado_r3=r3,
-                ))
-            db.flush()
-
-        # 8 EPAs de Cirurgia de Cabeça e Pescoço (CCP) — PLACEHOLDER.
-        # Substituir por dados reais assim que o documento de referência
-        # da especialidade CCP estiver disponível.
-        especialidade_ccp = db.scalar(select(Especialidade).where(Especialidade.nome == "Cirurgia de Cabeça e Pescoço"))
-        if especialidade_ccp is None:
-            especialidade_ccp = Especialidade(nome="Cirurgia de Cabeça e Pescoço")
-            db.add(especialidade_ccp)
-            db.flush()
-
-        if db.scalar(select(EPA).where(EPA.especialidade_id == especialidade_ccp.id)) is None:
-            for numero in range(1, 9):
-                db.add(EPA(
-                    especialidade_id=especialidade_ccp.id,
-                    numero=numero,
-                    nome=f"[PLACEHOLDER] EPA {numero} de Cirurgia de Cabeça e Pescoço",
-                    nivel_esperado_r1=2,
-                    nivel_esperado_r2=3,
-                    nivel_esperado_r3=4,
-                ))
+        if db.scalar(select(EPA).where(EPA.programa_id == programa.id)) is None:
+            for codigo, titulo, r1, r2, r3 in EPAS_CIRURGIA_GERAL:
+                db.add(
+                    EPA(
+                        codigo=codigo,
+                        titulo=titulo,
+                        programa_id=programa.id,
+                        nivel_r1=r1,
+                        nivel_r2=r2,
+                        nivel_r3=r3,
+                    )
+                )
             db.flush()
 
         for nome, email, papel in CONTAS:

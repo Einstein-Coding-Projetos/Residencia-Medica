@@ -56,6 +56,26 @@ class Programa(Base):
     especialidade: Mapped["Especialidade"] = relationship(back_populates="programas")
     usuarios: Mapped[list["Usuario"]] = relationship(back_populates="programa")
     servicos: Mapped[list["Servico"]] = relationship(back_populates="programa")
+    
+class ProgressoEPA(Base):
+    """Nível atual de um residente numa EPA específica.
+
+    Atualizado por um avaliador (preceptor/R4-R5) conforme observa o
+    residente. Uma linha por par (residente, EPA) — o histórico de como
+    se chegou ali fica na trilha de auditoria, não aqui.
+    """
+
+    __tablename__ = "progresso_epa"
+    __table_args__ = (UniqueConstraint("residente_id", "epa_id", name="uq_progresso_residente_epa"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    residente_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("usuarios.id"), nullable=False)
+    epa_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("epas.id"), nullable=False)
+
+    nivel_atual: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+    atualizado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc, onupdate=agora_utc)
+    atualizado_por: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("usuarios.id"), nullable=True)
 
 
 class Servico(Base):
