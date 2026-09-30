@@ -56,26 +56,6 @@ class Programa(Base):
     especialidade: Mapped["Especialidade"] = relationship(back_populates="programas")
     usuarios: Mapped[list["Usuario"]] = relationship(back_populates="programa")
     servicos: Mapped[list["Servico"]] = relationship(back_populates="programa")
-    
-class ProgressoEPA(Base):
-    """Nível atual de um residente numa EPA específica.
-
-    Atualizado por um avaliador (preceptor/R4-R5) conforme observa o
-    residente. Uma linha por par (residente, EPA) — o histórico de como
-    se chegou ali fica na trilha de auditoria, não aqui.
-    """
-
-    __tablename__ = "progresso_epa"
-    __table_args__ = (UniqueConstraint("residente_id", "epa_id", name="uq_progresso_residente_epa"),)
-
-    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
-    residente_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("usuarios.id"), nullable=False)
-    epa_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("epas.id"), nullable=False)
-
-    nivel_atual: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-
-    atualizado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc, onupdate=agora_utc)
-    atualizado_por: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("usuarios.id"), nullable=True)
 
 
 class Servico(Base):
@@ -188,82 +168,18 @@ class LogAuditoria(Base):
 class Avaliacao(Base):
     __tablename__ = "avaliacoes"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        Uuid,
-        primary_key=True,
-        default=uuid.uuid4,
-    )
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
 
-    # Em todo instrumento, exceto SETQ Smart: residente_id é quem é avaliado,
-    # avaliador_id é quem preenche. No SETQ o sentido inverte (residente
-    # preenche sobre o preceptor) para reaproveitar a mesma tabela e o mesmo
-    # mecanismo de hash/imutabilidade — ver app.api.routes.setq.
-    residente_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid,
-        ForeignKey("usuarios.id"),
-        nullable=False,
-    )
-
-    avaliador_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid,
-        ForeignKey("usuarios.id"),
-        nullable=False,
-    )
-
-    instrumento: Mapped[str] = mapped_column(
-        String(50),
-        nullable=False,
-    )
-
-    itens: Mapped[str] = mapped_column(
-        Text,
-        nullable=False,
-    )
-
-    observacoes: Mapped[str] = mapped_column(
-        Text,
-        nullable=False,
-        default="",
-    )
-
-    # Só usada quando instrumento == "zwisch": a Zwisch não soma domínios,
-    # é um nível de autonomia por etapa cirúrgica (ver app.core.instrumentos).
-    etapa_cirurgica: Mapped[str | None] = mapped_column(
-        String(200),
-        nullable=True,
-    )
-
-    nota: Mapped[float] = mapped_column(
-        nullable=False,
-    )
-
-    confirmado: Mapped[bool] = mapped_column(
-        Boolean,
-        nullable=False,
-        default=False,
-    )
-
-    faixa_rotulo: Mapped[str | None] = mapped_column(
-        String(50),
-        nullable=True,
-    )
-
-    declaracao_observacao: Mapped[str | None] = mapped_column(
-        Text,
-        nullable=True,
-    )
-
-    hash_integridade: Mapped[str | None] = mapped_column(
-        String(64),
-        nullable=True,
-    )
-
-    criado_em: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=agora_utc,
-    )
-
-    confirmado_em: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True),
-        nullable=True,
-    )
+    residente_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("usuarios.id"), nullable=False)
+    avaliador_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("usuarios.id"), nullable=False)
+    instrumento: Mapped[str] = mapped_column(String(50), nullable=False)
+    itens: Mapped[str] = mapped_column(Text, nullable=False)
+    observacoes: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    etapa_cirurgica: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    nota: Mapped[float] = mapped_column(nullable=False)
+    confirmado: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    faixa_rotulo: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    declaracao_observacao: Mapped[str | None] = mapped_column(Text, nullable=True)
+    hash_integridade: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
+    confirmado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
