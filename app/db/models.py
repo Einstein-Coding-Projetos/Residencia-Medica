@@ -6,7 +6,20 @@ import json
 import uuid
 from datetime import date, datetime, timezone
 
-from sqlalchemy import Boolean, Date, DateTime, Enum, ForeignKey, String, Text, Uuid
+
+from sqlalchemy import (
+    Boolean,
+    Date,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    Uuid,
+)
+
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -63,7 +76,101 @@ class Programa(Base):
     especialidade: Mapped["Especialidade"] = relationship(back_populates="programas")
     usuarios: Mapped[list["Usuario"]] = relationship(back_populates="programa")
     servicos: Mapped[list["Servico"]] = relationship(back_populates="programa")
+    epas: Mapped[list["EPA"]] = relationship(back_populates="programa")
+    
+class EPA(Base):
+    """Atividade Profissional Confiável vinculada a um programa de residência."""
 
+    __tablename__ = "epas"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+
+    codigo: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+    )
+
+    titulo: Mapped[str] = mapped_column(
+        String(300),
+        nullable=False,
+    )
+
+    programa_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("programas.id"),
+        nullable=False,
+    )
+
+    nivel_r1: Mapped[int] = mapped_column(
+        nullable=False,
+    )
+
+    nivel_r2: Mapped[int] = mapped_column(
+        nullable=False,
+    )
+
+    nivel_r3: Mapped[int] = mapped_column(
+        nullable=False,
+    )
+
+    ativo: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+    )
+
+    criado_em: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=agora_utc,
+    )
+
+    programa: Mapped["Programa"] = relationship(
+        back_populates="epas"
+    )
+
+
+class ProgressoEPA(Base):
+    """Nível atual de um residente em cada EPA."""
+
+    __tablename__ = "progresso_epa"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "residente_id",
+            "epa_id",
+            name="uq_progresso_residente_epa",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, primary_key=True, default=uuid.uuid4
+    )
+
+    residente_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("usuarios.id"), nullable=False
+    )
+
+    epa_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("epas.id"), nullable=False
+    )
+
+    nivel_atual: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1
+    )
+
+    atualizado_em: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=agora_utc,
+        onupdate=agora_utc,
+    )
+
+    atualizado_por: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("usuarios.id"), nullable=True
+    )
 
 class Servico(Base):
     """O setor dentro do hospital (ex.: Enfermaria, Ambulatório, Centro
