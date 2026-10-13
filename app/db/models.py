@@ -6,7 +6,7 @@ import json
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, Text, Uuid
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint, Uuid
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -119,6 +119,45 @@ class EPA(Base):
         back_populates="epas"
     )
 
+
+class ProgressoEPA(Base):
+    """Nível atual de um residente em cada EPA."""
+
+    __tablename__ = "progresso_epa"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "residente_id",
+            "epa_id",
+            name="uq_progresso_residente_epa",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, primary_key=True, default=uuid.uuid4
+    )
+
+    residente_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("usuarios.id"), nullable=False
+    )
+
+    epa_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("epas.id"), nullable=False
+    )
+
+    nivel_atual: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1
+    )
+
+    atualizado_em: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=agora_utc,
+        onupdate=agora_utc,
+    )
+
+    atualizado_por: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("usuarios.id"), nullable=True
+    )
 
 class Servico(Base):
     """O setor dentro do hospital (ex.: Enfermaria, Ambulatório, Centro
