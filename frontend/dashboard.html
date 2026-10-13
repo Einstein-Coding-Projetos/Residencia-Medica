@@ -46,22 +46,23 @@
   // (fichas de avaliação, portfólio, etc.) chegam nos próximos sprints.
   const SECOES_POR_PAPEL = {
     residente: [
-      { titulo: "Portfólio", descricao: "Cirurgias, trabalhos e progressão por EPA." },
+      { titulo: "Portfólio", descricao: "Notas, progressão por EPA, procedimentos e exportação em PDF.", link: "portfolio.html" },
       { titulo: "Avaliações recebidas", descricao: "Feedback dos seus preceptores." },
       { titulo: "Frequência", descricao: "Check-in e check-out do dia." },
     ],
     preceptor: [
       { titulo: "Avaliações a aplicar", descricao: "Prazos e residentes pendentes de avaliação." },
-      { titulo: "Meus residentes", descricao: "Residentes do seu programa." },
+      { titulo: "Meus residentes", descricao: "Portfólio dos residentes do seu programa.", link: "portfolio.html" },
     ],
     avaliador_intermediario: [
       { titulo: "Avaliações a aplicar", descricao: "Prazos e residentes pendentes de avaliação." },
-      { titulo: "Meus residentes", descricao: "Residentes do seu programa." },
+      { titulo: "Meus residentes", descricao: "Portfólio dos residentes do seu programa.", link: "portfolio.html" },
     ],
     administrador: [
       { titulo: "Cadastros", descricao: "Programas, especialidades e serviços." },
       { titulo: "Usuários", descricao: "Contas de residentes, preceptores e administradores." },
       { titulo: "Auditoria", descricao: "Trilha de ações registradas no sistema." },
+      { titulo: "Portfólios", descricao: "Portfólio de cada residente, com exportação em PDF.", link: "portfolio.html" },
     ],
   };
 
@@ -114,7 +115,13 @@
     grade.innerHTML = "";
     const cartao = document.createElement("div");
     cartao.className = "cartao";
-    cartao.innerHTML = `<h3>${secoes[indice].titulo}</h3><p>${secoes[indice].descricao} — disponível em um próximo sprint.</p>`;
+    const secao = secoes[indice];
+    if (secao.link) {
+      cartao.innerHTML = `<h3>${secao.titulo}</h3><p>${secao.descricao}</p><p style="margin-top:12px;color:var(--cirurgico);font-weight:700">Abrir →</p>`;
+      cartao.onclick = () => { window.location.href = secao.link; };
+    } else {
+      cartao.innerHTML = `<h3>${secao.titulo}</h3><p>${secao.descricao} — disponível em um próximo sprint.</p>`;
+    }
     grade.appendChild(cartao);
   }
 
