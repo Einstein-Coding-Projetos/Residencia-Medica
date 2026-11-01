@@ -10,6 +10,9 @@ from sqlalchemy.orm import Session
 
 from app.db.models import EPA, ProgressoEPA, Usuario, agora_utc
 
+class SaltoInvalidoError(ValueError):
+    """Erro levantado quando o salto de nível viola a regra de 30 dias."""
+    pass
 
 def _ano_residencia(residente: Usuario) -> int:
     """Estimativa temporária até o cadastro ter o ano real."""
@@ -67,7 +70,6 @@ def calcular_mapa_epas(
 
     return mapa
 
-
 def atualizar_progresso(
     db: Session,
     *,
@@ -89,6 +91,18 @@ def atualizar_progresso(
             epa_id=epa_id,
         )
         db.add(progresso)
+    else:
+        # REGRA SPRINT 3: Bloqueio de salto > 1 nível em < 30 dias
+        diferenca_niveis = nivel_atual - progresso.nivel_atual
+        
+        if diferenca_niveis >= 2:
+            dias_desde_atualizacao = (agora_utc() - progresso.atualizado_em).days
+            
+            if dias_desde_atualizacao < 30:
+                raise SaltoInvalidoError(
+                    f"Avanço bloqueado: não é permitido saltar {diferenca_niveis} níveis "
+                    f"em apenas {dias_desde_atualizacao} dias (mínimo de 30 dias exigido)."
+                )
 
     progresso.nivel_atual = nivel_atual
     progresso.atualizado_por = atualizado_por
