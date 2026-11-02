@@ -19,3 +19,5 @@ class ItemMapaEPA(BaseModel):
     nivel_esperado: int
     nivel_atual: int
     dentro_do_esperado: bool
+    observacoes_trimestre: int | None = None
+    minimo_trimestre: int | None = None

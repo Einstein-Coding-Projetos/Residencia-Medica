@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import date
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
@@ -20,6 +21,7 @@ class UsuarioPublico(BaseModel):
     email: EmailStr
     papel: Papel
     programa_id: uuid.UUID | None = None
+    data_inicio_programa: date | None = None
 
 
 class TokenResponse(BaseModel):
@@ -37,3 +39,4 @@ class UsuarioCreate(BaseModel):
     senha: str = Field(min_length=8, max_length=72)
     papel: Papel
     programa_id: uuid.UUID | None = None
+    data_inicio_programa: date | None = None

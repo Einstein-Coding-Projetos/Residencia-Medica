@@ -8,7 +8,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.epa_service import _ano_residencia
+from app.core.epa_service import _ano_residencia, contar_observacoes_trimestre
 from app.db.models import EPA, ProgressoEPA, Usuario
 
 
@@ -59,7 +59,9 @@ def progresso_do_residente(
             "atualizado_em": (
                 progresso.atualizado_em if progresso else None
             ),
-            "observacoes_trimestre": None,
+            "observacoes_trimestre": contar_observacoes_trimestre(
+                db, residente_id=residente.id, epa_id=epa.id
+            ),
         })
 
     return {

@@ -19,13 +19,14 @@ from app.api.routes import (
     usuarios,
 )
 from app.core.config import settings
-from app.db.models import Base
-from app.db.session import engine
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    Base.metadata.create_all(bind=engine)
+    # Schema é gerenciado por Alembic (`alembic upgrade head`), não mais
+    # criado aqui — rodar migrações a cada boot é arriscado com múltiplas
+    # réplicas/workers disputando a mesma alteração; migração é passo de
+    # deploy separado.
     yield
 
 

@@ -17,6 +17,7 @@ from app.core.auth_service import registrar_auditoria
 from app.core.epa_service import (
     atualizar_progresso,
     calcular_mapa_epas,
+    ObservacoesInsuficientesError,
     SaltoInvalidoError,
 )
 
@@ -172,11 +173,11 @@ def atualizar_progresso_epa(
         atualizar_progresso(
             db,
             residente_id=residente.id,
-            epa_id=epa.id,
+            epa=epa,
             nivel_atual=dados.nivel_atual,
             atualizado_por=avaliador.id,
         )
-    except SaltoInvalidoError as e:
+    except (SaltoInvalidoError, ObservacoesInsuficientesError) as e:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(e),

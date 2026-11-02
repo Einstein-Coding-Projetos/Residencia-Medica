@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from datetime import date, timedelta
+
 from sqlalchemy import select
 
 from app.core.auth_service import criar_usuario
 from app.db.models import (
-    Base,
     EPA,
     Especialidade,
     Papel,
@@ -12,15 +13,20 @@ from app.db.models import (
     Servico,
     Usuario,
 )
-from app.db.session import SessionLocal, engine
+from app.db.session import SessionLocal
 
 SENHA_PADRAO = "Residencia2026"
 
+# ~400 dias atrás cai de forma convincente em R2 (ver
+# app.core.epa_service._ano_residencia) — só a residente de demonstração
+# precisa de data_inicio_programa, os outros papéis não usam esse campo.
+INICIO_RESIDENTE_DEMO = date.today() - timedelta(days=400)
+
 CONTAS = [
-    ("Ana Souza", "ana@hospital.br", Papel.RESIDENTE),
-    ("Dr. Bruno Lima", "bruno@hospital.br", Papel.PRECEPTOR),
-    ("Dra. Clara Reis", "clara@hospital.br", Papel.AVALIADOR_INTERMEDIARIO),
-    ("Carla Menezes", "carla@hospital.br", Papel.ADMINISTRADOR),
+    ("Ana Souza", "ana@hospital.br", Papel.RESIDENTE, INICIO_RESIDENTE_DEMO),
+    ("Dr. Bruno Lima", "bruno@hospital.br", Papel.PRECEPTOR, None),
+    ("Dra. Clara Reis", "clara@hospital.br", Papel.AVALIADOR_INTERMEDIARIO, None),
+    ("Carla Menezes", "carla@hospital.br", Papel.ADMINISTRADOR, None),
 ]
 
 EPAS = [
@@ -139,7 +145,8 @@ EPAS = [
 ]
 
 def main() -> None:
-    Base.metadata.create_all(bind=engine)
+    # Schema é gerenciado por Alembic — rode `alembic upgrade head` antes
+    # deste script.
     db = SessionLocal()
     try:
         especialidade = db.scalar(select(Especialidade))
@@ -191,7 +198,7 @@ def main() -> None:
 
         db.flush()
 
-        for nome, email, papel in CONTAS:
+        for nome, email, papel, data_inicio_programa in CONTAS:
             if db.scalar(select(Usuario).where(Usuario.email == email)):
                 print(f"  já existe: {email}")
                 continue
@@ -202,6 +209,7 @@ def main() -> None:
                 senha=SENHA_PADRAO,
                 papel=papel,
                 programa_id=programa.id,
+                data_inicio_programa=data_inicio_programa,
             )
             print(f"  criado:    {email}  ({papel.value})")
 

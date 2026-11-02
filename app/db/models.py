@@ -205,6 +205,11 @@ class Usuario(Base):
 
     ativo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
+    # Data real de início no programa (residentes). Usada para calcular o
+    # ano de residência (R1/R2/R3) em app.core.epa_service._ano_residencia;
+    # quando ausente (cadastros antigos), cai no fallback por criado_em.
+    data_inicio_programa: Mapped[date | None] = mapped_column(Date, nullable=True)
+
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora_utc)
     ultimo_login_em: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -278,6 +283,16 @@ class Avaliacao(Base):
     # é um nível de autonomia por etapa cirúrgica (ver app.core.instrumentos).
     etapa_cirurgica: Mapped[str | None] = mapped_column(
         String(200),
+        nullable=True,
+    )
+
+    # EPA que esta avaliação documenta (opcional). Uma avaliação confirmada
+    # com epa_id conta como uma "observação" para o mínimo trimestral da
+    # EPA (ver app.core.epa_service.contar_observacoes_trimestre). SETQ
+    # Smart nunca preenche isto — SetqCriar não tem o campo.
+    epa_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("epas.id"),
         nullable=True,
     )
 

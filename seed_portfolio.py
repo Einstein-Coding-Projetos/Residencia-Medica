@@ -18,7 +18,7 @@ from sqlalchemy import select
 
 import seed
 from app.core.instrumentos import calcular_resultado, obter_instrumento, resultado_zwisch
-from app.db.models import Avaliacao, Procedimento, Usuario
+from app.db.models import EPA, Avaliacao, Procedimento, Usuario
 from app.db.session import SessionLocal
 from app.utils.hash_utils import gerar_hash_registro
 
@@ -54,7 +54,7 @@ def _confirmar(db, a: Avaliacao, quando: datetime) -> None:
     a.confirmado_em = quando
 
 
-def _avaliacao(db, residente, avaliador, codigo, total, dias_atras, obs=""):
+def _avaliacao(db, residente, avaliador, codigo, total, dias_atras, obs="", epa=None):
     inst = obter_instrumento(codigo)
     itens = _distribuir(codigo, total)
     r = calcular_resultado(inst, itens)
@@ -62,18 +62,20 @@ def _avaliacao(db, residente, avaliador, codigo, total, dias_atras, obs=""):
         residente_id=residente.id, avaliador_id=avaliador.id, instrumento=codigo,
         itens=json.dumps([{"dominio": i.dominio, "nota": i.nota} for i in itens]),
         observacoes=obs, nota=r.valor, faixa_rotulo=r.faixa_rotulo,
+        epa_id=epa.id if epa else None,
     )
     db.add(a)
     db.flush()
     _confirmar(db, a, HOJE - timedelta(days=dias_atras))
 
 
-def _zwisch(db, residente, avaliador, etapa, nivel, dias_atras, obs=""):
+def _zwisch(db, residente, avaliador, etapa, nivel, dias_atras, obs="", epa=None):
     inst = obter_instrumento("zwisch")
     r = resultado_zwisch(inst, nivel)
     a = Avaliacao(
         residente_id=residente.id, avaliador_id=avaliador.id, instrumento="zwisch",
         itens="[]", observacoes=obs, etapa_cirurgica=etapa, nota=r.valor, faixa_rotulo=r.faixa_rotulo,
+        epa_id=epa.id if epa else None,
     )
     db.add(a)
     db.flush()
@@ -92,16 +94,22 @@ def main() -> None:
             print("A Ana já tem histórico — nada a fazer.")
             return
 
+        # EPA09 = "Tratando pacientes com colecistopatia" — usada para
+        # mostrar observacoes_trimestre com dado real no mapa/portfólio.
+        epa09 = db.scalar(
+            select(EPA).where(EPA.codigo == "EPA09", EPA.programa_id == ana.programa_id)
+        )
+
         osats = [
-            (15, 170, bruno, "Manuseio de tecidos ainda brusco na dissecção. Rever tração."),
-            (18, 140, clara, "Melhor fluxo operatório; ainda hesita na troca de instrumentos."),
-            (21, 110, bruno, ""),
-            (24, 75, bruno, "Boa hemostasia. Orientar melhor o auxiliar."),
-            (27, 40, clara, "Antecipou etapas com segurança. Evolução clara."),
-            (30, 10, bruno, "Conduziu a colecistectomia com autonomia supervisionada."),
+            (15, 170, bruno, "Manuseio de tecidos ainda brusco na dissecção. Rever tração.", None),
+            (18, 140, clara, "Melhor fluxo operatório; ainda hesita na troca de instrumentos.", None),
+            (21, 110, bruno, "", None),
+            (24, 75, bruno, "Boa hemostasia. Orientar melhor o auxiliar.", None),
+            (27, 40, clara, "Antecipou etapas com segurança. Evolução clara.", epa09),
+            (30, 10, bruno, "Conduziu a colecistectomia com autonomia supervisionada.", epa09),
         ]
-        for total, dias, quem, obs in osats:
-            _avaliacao(db, ana, quem, "osats", total, dias, obs)
+        for total, dias, quem, obs, epa in osats:
+            _avaliacao(db, ana, quem, "osats", total, dias, obs, epa=epa)
 
         for total, dias, obs in [
             (24, 160, "Anamnese incompleta para fatores de risco."),
@@ -115,16 +123,18 @@ def main() -> None:
         for total, dias in [(9, 130), (11, 70), (13, 25)]:
             _avaliacao(db, ana, bruno, "notss", total, dias)
 
-        for etapa, nivel, dias in [
-            ("Acesso e posicionamento de trocartes", 1, 150),
-            ("Acesso e posicionamento de trocartes", 2, 90),
-            ("Acesso e posicionamento de trocartes", 3, 30),
-            ("Dissecção do triângulo de Calot", 1, 120),
-            ("Dissecção do triângulo de Calot", 2, 45),
-            ("Fechamento da parede abdominal", 3, 100),
-            ("Fechamento da parede abdominal", 4, 20),
+        for etapa, nivel, dias, epa in [
+            ("Acesso e posicionamento de trocartes", 1, 150, None),
+            ("Acesso e posicionamento de trocartes", 2, 90, None),
+            ("Acesso e posicionamento de trocartes", 3, 30, None),
+            # Dissecção do triângulo de Calot é etapa específica da
+            # colecistectomia — conta como observação de EPA09.
+            ("Dissecção do triângulo de Calot", 1, 120, epa09),
+            ("Dissecção do triângulo de Calot", 2, 45, epa09),
+            ("Fechamento da parede abdominal", 3, 100, None),
+            ("Fechamento da parede abdominal", 4, 20, None),
         ]:
-            _zwisch(db, ana, bruno, etapa, nivel, dias)
+            _zwisch(db, ana, bruno, etapa, nivel, dias, epa=epa)
 
         procedimentos = [
             ("Colecistectomia videolaparoscópica", "primeiro_auxiliar", 160, "validado"),

@@ -211,10 +211,11 @@ padrão do `dashboard.html`, com fonte e botões grandes para os usuários mais 
 ## 8. Como rodar
 
 ```bash
-rm -f dev.db                         # tem tabela nova (procedimentos)
 pip install -r requirements.txt
+alembic upgrade head                 # schema agora é versionado por Alembic, não mais por rm -f dev.db
 python -m pytest tests/ -q
-python seed_portfolio.py             # contas de teste + histórico fictício da Ana
+python seed.py                       # contas de teste
+python seed_portfolio.py             # histórico fictício da Ana
 uvicorn app.main:app --reload
 cd frontend && python -m http.server 8080
 ```
@@ -229,12 +230,12 @@ A senha das duas contas é `Residencia2026`.
 
 ## 9. Pendências
 
-| # | Item | Quem |
-|---|---|---|
-| 1 | Criar `app/core/epas.py` com `progresso_do_residente` (§3.2) | tarefa 1 |
-| 2 | Guardar o **ano atual do residente** (R1…R5) e devolvê-lo em `ano_residente` | tarefa 1 |
-| 3 | Enviar `observacoes_trimestre` por EPA | tarefa 2 |
-| 4 | **Documento das 8 EPAs de Cabeça e Pescoço**: não está no caderno de Cirurgia Geral | cliente |
-| 5 | Lista de procedimentos: texto livre ou lista fechada? | cliente |
-| 6 | Check-in/check-out (frequência) aparece no MVP do documento do projeto, mas não existe no sistema | time |
-| 7 | A `Avaliacao` não tem "data da atividade", então o portfólio usa `confirmado_em` como data | time |
+| # | Item | Quem | Status |
+|---|---|---|---|
+| 1 | Criar `app/core/epas.py` com `progresso_do_residente` (§3.2) | tarefa 1 | ✅ resolvido |
+| 2 | Guardar o **ano atual do residente** (R1…R5) e devolvê-lo em `ano_residente` | tarefa 1 | ✅ resolvido — `Usuario.data_inicio_programa` (migração Alembic), `_ano_residencia()` usa o campo real e só cai no fallback por `criado_em` em cadastros antigos sem o campo preenchido |
+| 3 | Enviar `observacoes_trimestre` por EPA | tarefa 2 | ✅ resolvido — `epa_id` em `Avaliacao` + `contar_observacoes_trimestre()`, também usado como gate antes de avançar de nível (regra do Sprint 3) |
+| 4 | **Documento das 8 EPAs de Cabeça e Pescoço**: não está no caderno de Cirurgia Geral | cliente | ⏳ ainda pendente — bloqueio externo |
+| 5 | Lista de procedimentos: texto livre ou lista fechada? | cliente | ⏳ ainda pendente |
+| 6 | Check-in/check-out (frequência) aparece no MVP do documento do projeto, mas não existe no sistema | time | ⏳ ainda pendente |
+| 7 | A `Avaliacao` não tem "data da atividade", então o portfólio usa `confirmado_em` como data | time | ⏳ ainda pendente |
