@@ -36,6 +36,7 @@ def cadastrar_usuario(
             senha=dados.senha,
             papel=dados.papel,
             programa_id=dados.programa_id,
+            data_inicio_programa=dados.data_inicio_programa,
         )
         db.commit()
     except SenhaInvalida as exc:

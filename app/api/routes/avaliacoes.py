@@ -22,7 +22,7 @@ from app.core.instrumentos import (
     validar_zwisch,
 )
 from app.core.permissoes_avaliacao import exigir_pode_avaliar, exigir_pode_avaliar_setq
-from app.db.models import Avaliacao, Papel, Usuario, agora_utc
+from app.db.models import EPA, Avaliacao, Papel, Usuario, agora_utc
 from app.db.session import get_db
 from app.schemas.avaliacoes import (
     AvaliacaoCriar,
@@ -79,6 +79,7 @@ def _montar_resposta(avaliacao: Avaliacao) -> dict:
         "faixa_rotulo": avaliacao.faixa_rotulo,
         "faixa_descricao": faixa_descricao,
         "etapa_cirurgica": avaliacao.etapa_cirurgica,
+        "epa_id": avaliacao.epa_id,
         "confirmado": avaliacao.confirmado,
         "hash_integridade": avaliacao.hash_integridade,
         "declaracao_observacao": avaliacao.declaracao_observacao,
@@ -122,6 +123,18 @@ def criar_avaliacao(
 
     exigir_pode_avaliar(avaliador, residente)
 
+    if dados.epa_id is not None:
+        epa = db.get(EPA, dados.epa_id)
+
+        if epa is None or not epa.ativo:
+            raise HTTPException(status_code=404, detail="EPA não encontrada.")
+
+        if residente.programa_id != epa.programa_id:
+            raise HTTPException(
+                status_code=400,
+                detail="EPA não pertence ao programa do residente.",
+            )
+
     if instrumento.codigo == "zwisch":
         try:
             validar_zwisch(instrumento, dados.etapa_cirurgica, dados.nivel_autonomia)
@@ -150,6 +163,7 @@ def criar_avaliacao(
         itens=json.dumps(itens_json, ensure_ascii=False),
         observacoes=dados.observacoes,
         etapa_cirurgica=etapa_cirurgica,
+        epa_id=dados.epa_id,
         nota=resultado.valor,
         faixa_rotulo=resultado.faixa_rotulo,
         confirmado=False,

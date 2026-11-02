@@ -13,7 +13,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.api.deps import usuario_atual
 from app.core.instrumentos import obter_instrumento
-from app.db.models import Base, Papel, Programa, Especialidade, Usuario
+from app.db.models import EPA, Base, Papel, Programa, Especialidade, Usuario
 from app.db.session import get_db
 from app.main import app
 
@@ -67,6 +67,7 @@ def ambiente():
     yield {
         "cliente": cliente,
         "db": db,
+        "programa": programa,
         "preceptor": preceptor,
         "residente": residente,
         "outro_preceptor": outro_preceptor,
@@ -147,6 +148,68 @@ def test_recusa_setq_nesta_rota(ambiente):
     r = _criar(ambiente["cliente"], ambiente["residente"], "setq_smart", 4)
     assert r.status_code == 400
     assert "/avaliacoes/setq" in r.json()["detail"]
+
+
+def test_cria_avaliacao_com_epa_do_mesmo_programa(ambiente):
+    epa = EPA(
+        codigo="EPA09",
+        titulo="Tratando pacientes com colecistopatia",
+        programa_id=ambiente["programa"].id,
+        nivel_r1=1,
+        nivel_r2=2,
+        nivel_r3=3,
+    )
+    ambiente["db"].add(epa)
+    ambiente["db"].commit()
+
+    r = ambiente["cliente"].post(
+        "/api/v1/avaliacoes",
+        json={
+            "residente_id": str(ambiente["residente"].id),
+            "instrumento": "osats",
+            "itens": _itens("osats", 4),
+            "observacoes": "Observação de teste.",
+            "epa_id": str(epa.id),
+        },
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["epa_id"] == str(epa.id)
+
+
+def test_rejeita_epa_de_outro_programa(ambiente):
+    outra_especialidade = Especialidade(nome=f"Outra especialidade {uuid.uuid4()}")
+    ambiente["db"].add(outra_especialidade)
+    ambiente["db"].flush()
+
+    outro_programa = Programa(
+        nome="Outro programa",
+        especialidade_id=outra_especialidade.id,
+        instituicao="Outro hospital",
+    )
+    ambiente["db"].add(outro_programa)
+    ambiente["db"].flush()
+
+    epa_de_outro_programa = EPA(
+        codigo="EPA01",
+        titulo="Admitindo o paciente cirúrgico",
+        programa_id=outro_programa.id,
+        nivel_r1=2,
+        nivel_r2=3,
+        nivel_r3=5,
+    )
+    ambiente["db"].add(epa_de_outro_programa)
+    ambiente["db"].commit()
+
+    r = ambiente["cliente"].post(
+        "/api/v1/avaliacoes",
+        json={
+            "residente_id": str(ambiente["residente"].id),
+            "instrumento": "osats",
+            "itens": _itens("osats", 4),
+            "epa_id": str(epa_de_outro_programa.id),
+        },
+    )
+    assert r.status_code == 400
 
 
 # --------------------------------------------------------------------------

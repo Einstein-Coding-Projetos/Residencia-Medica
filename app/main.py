@@ -9,20 +9,24 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import (
     auth,
     avaliacoes,
+    epas,
     especialidades,
     instrumentos,
+    portfolio,
+    procedimentos,
     programas,
     servicos,
     usuarios,
 )
 from app.core.config import settings
-from app.db.models import Base
-from app.db.session import engine
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    Base.metadata.create_all(bind=engine)
+    # Schema é gerenciado por Alembic (`alembic upgrade head`), não mais
+    # criado aqui — rodar migrações a cada boot é arriscado com múltiplas
+    # réplicas/workers disputando a mesma alteração; migração é passo de
+    # deploy separado.
     yield
 
 
@@ -34,6 +38,8 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # Sem isto o navegador esconde o nome do arquivo do PDF do portfólio.
+    expose_headers=["Content-Disposition"],
 )
 
 app.include_router(auth.router, prefix=settings.API_PREFIX)
@@ -43,6 +49,9 @@ app.include_router(programas.router, prefix=settings.API_PREFIX)
 app.include_router(servicos.router, prefix=settings.API_PREFIX)
 app.include_router(usuarios.router, prefix=settings.API_PREFIX)
 app.include_router(instrumentos.router, prefix=settings.API_PREFIX)
+app.include_router(procedimentos.router, prefix=settings.API_PREFIX)
+app.include_router(portfolio.router, prefix=settings.API_PREFIX)
+app.include_router(epas.router, prefix=settings.API_PREFIX)
 
 
 @app.get("/saude", tags=["infra"])
