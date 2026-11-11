@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import unicodedata
 import uuid
-from datetime import date
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -75,7 +74,6 @@ def criar_usuario(
     senha: str,
     papel: Papel,
     programa_id: uuid.UUID | None = None,
-    data_inicio_programa: date | None = None,
 ) -> Usuario:
     usuario = Usuario(
         nome=nome.strip(),
@@ -83,7 +81,6 @@ def criar_usuario(
         senha_hash=gerar_hash_senha(senha),
         papel=papel,
         programa_id=programa_id,
-        data_inicio_programa=data_inicio_programa,
     )
     db.add(usuario)
     db.flush()

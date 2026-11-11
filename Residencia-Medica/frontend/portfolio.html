@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Portfólio — Residência Médica</title>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:wght@500;600&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="portfolio.css">
+</head>
+<body>
+<div class="painel">
+  <nav class="lateral" aria-label="Seções do portfólio">
+    <p class="marca">Residência Médica</p>
+    <p class="subtitulo">Portfólio do residente</p>
+    <a class="nav-item" href="#resumo">Resumo</a>
+    <a class="nav-item" href="#epas">Mapa das EPAs</a>
+    <a class="nav-item" href="#instrumentos">Desempenho</a>
+    <a class="nav-item" href="#zwisch">Autonomia cirúrgica</a>
+    <a class="nav-item" href="#procedimentos">Procedimentos</a>
+    <a class="nav-item" href="#historico">Histórico e feedback</a>
+  </nav>
+
+  <div class="conteudo">
+    <header class="topo">
+      <h1>Portfólio</h1>
+      <div class="acoes">
+        <a class="voltar" href="dashboard.html">← Painel</a>
+        <button class="exportar" id="botaoPdf" onclick="exportarPdf()" disabled>Exportar PDF</button>
+      </div>
+    </header>
+
+    <main class="corpo-painel">
+      <div class="escolha-residente" id="escolha" hidden>
+        <label for="seletor">Residente</label>
+        <select id="seletor" onchange="trocarResidente(this.value)"></select>
+      </div>
+      <div id="miolo"><p class="aviso">Carregando portfólio…</p></div>
+    </main>
+  </div>
+</div>
+
+<script>
+  const API = "http://localhost:8000/api/v1";
+
+  // Mesmos textos do backend (app/core/portfolio_epas.py)
+  const SITUACAO = { atingido: "No nível", abaixo: "Abaixo do esperado", sem_nivel: "Sem registro", sem_referencia: "Ano não informado" };
+  const COR = { atingido: "#0F6157", abaixo: "#A86400", sem_nivel: "#53686E", sem_referencia: "#53686E" };
+  const TONS_FAIXA = ["#F6E9E7", "#F5F0E1", "#E2F0EC"];
+
+  let sessao = null;
+  let residenteAtual = null; // null = "meu" (residente logado)
+  let dados = null;
+
+  // ------------------------------------------------------------ utilidades
+  const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const num = (v) => (v === null || v === undefined) ? "—"
+    : Number.isInteger(v) ? String(v) : v.toFixed(1).replace(".", ",");
+  const data = (iso) => {
+    if (!iso) return "—";
+    // "2026-09-15" (date) ou datetime; o backend grava em UTC
+    const d = iso.length === 10 ? new Date(iso + "T12:00:00") : new Date(iso.endsWith("Z") || iso.includes("+") ? iso : iso + "Z");
+    return d.toLocaleDateString("pt-BR");
+  };
+  const dataCurta = (iso) => data(iso).slice(0, 5);
+
+  function carregarSessao() {
+    const bruto = sessionStorage.getItem("sessao");
+    if (!bruto) { window.location.href = "login.html"; return null; }
+    return JSON.parse(bruto);
+  }
+
+  async function chamar(caminho) {
+    const r = await fetch(API + caminho, { headers: { Authorization: `Bearer ${sessao.access_token}` } });
+    if (r.status === 401) { sessionStorage.removeItem("sessao"); window.location.href = "login.html"; throw new Error("sessão"); }
+    if (!r.ok) {
+      let msg = "Não foi possível carregar o portfólio.";
+      try { msg = (await r.json()).detail || msg; } catch (_) {}
+      throw new Error(msg);
+    }
+    return r;
+  }
+
+  // ------------------------------------------------------------ início
+  async function iniciar() {
+    sessao = carregarSessao();
+    if (!sessao) return;
+    const params = new URLSearchParams(location.search);
+
+    if (sessao.usuario.papel === "residente") {
+      residenteAtual = null;
+      return carregar();
+    }
+
+    // Preceptor, R4/R5 e administrador escolhem de quem é o portfólio
+    try {
+      const lista = await (await chamar("/portfolio/residentes")).json();
+      const seletor = document.getElementById("seletor");
+      if (!lista.length) {
+        document.getElementById("miolo").innerHTML = '<p class="aviso">Nenhum residente do seu programa para exibir.</p>';
+        return;
+      }
+      seletor.innerHTML = lista.map((u) => `<option value="${u.id}">${esc(u.nome)}</option>`).join("");
+      document.getElementById("escolha").hidden = false;
+      const pedido = params.get("residente");
+      residenteAtual = lista.some((u) => u.id === pedido) ? pedido : lista[0].id;
+      seletor.value = residenteAtual;
+      carregar();
+    } catch (e) { mostrarErro(e); }
+  }
+
+  function trocarResidente(id) {
+    residenteAtual = id;
+    history.replaceState(null, "", `?residente=${id}`);
+    carregar();
+  }
+
+  async function carregar() {
+    const miolo = document.getElementById("miolo");
+    document.getElementById("botaoPdf").disabled = true;
+    miolo.innerHTML = '<p class="aviso">Carregando portfólio…</p>';
+    try {
+      const caminho = residenteAtual ? `/portfolio/${residenteAtual}` : "/portfolio/meu";
+      dados = await (await chamar(caminho)).json();
+      miolo.innerHTML = [
+        blocoResumo(dados), blocoEpas(dados.epas), blocoInstrumentos(dados.instrumentos),
+        blocoZwisch(dados.zwisch), blocoProcedimentos(dados.procedimentos), blocoHistorico(dados.avaliacoes),
+      ].join("");
+      document.getElementById("botaoPdf").disabled = false;
+    } catch (e) { mostrarErro(e); }
+  }
+
+  function mostrarErro(e) {
+    document.getElementById("miolo").innerHTML = `<p class="aviso erro-carga">${esc(e.message)}</p>`;
+  }
+
+  async function exportarPdf() {
+    const botao = document.getElementById("botaoPdf");
+    botao.disabled = true;
+    botao.textContent = "Gerando PDF…";
+    try {
+      const caminho = residenteAtual ? `/portfolio/${residenteAtual}/pdf` : "/portfolio/meu/pdf";
+      const r = await chamar(caminho);
+      const nome = (r.headers.get("Content-Disposition") || "").match(/filename="([^"]+)"/)?.[1] || "portfolio.pdf";
+      const url = URL.createObjectURL(await r.blob());
+      const link = Object.assign(document.createElement("a"), { href: url, download: nome });
+      document.body.appendChild(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    } catch (e) {
+      alert("Não foi possível gerar o PDF: " + e.message);
+    } finally {
+      botao.disabled = false;
+      botao.textContent = "Exportar PDF";
+    }
+  }
+
+  // ------------------------------------------------------------ blocos
+  function blocoResumo(p) {
+    const r = p.residente, s = p.resumo;
+    const periodo = s.primeira_avaliacao ? `${data(s.primeira_avaliacao)} a ${data(s.ultima_avaliacao)}` : "sem avaliações confirmadas";
+    const epas = s.epas_comparavel ? `${s.epas_atingidas}/${s.epas_total}` : "—";
+    const kpi = (n, t) => `<div class="kpi"><p class="numero">${n}</p><p class="legenda">${t}</p></div>`;
+    return `
+      <section class="secao" id="resumo">
+        <div class="identidade">
+          <p class="rotulo">Portfólio do residente</p>
+          <h2>${esc(r.nome)}</h2>
+          <p>${esc([r.programa, r.instituicao].filter(Boolean).join(" · ") || "Programa não informado")}</p>
+          <p>Especialidade: ${esc(r.especialidade || "—")}${r.ano_residencia ? ` · Ano: ${esc(r.ano_residencia)}` : ""} · Período avaliado: ${periodo}</p>
+        </div>
+        <div class="kpis">
+          ${kpi(s.total_avaliacoes, "avaliações confirmadas")}
+          ${kpi(s.instrumentos_utilizados, "instrumentos utilizados")}
+          ${kpi(s.procedimentos_validados, "procedimentos validados")}
+          ${kpi(epas, "EPAs no nível esperado")}
+        </div>
+      </section>`;
+  }
+
+  function barraNiveis(atual, esperado, total, cor) {
+    let html = "";
+    for (let i = 1; i <= total; i++) {
+      const cheio = atual !== null && atual !== undefined && i <= atual;
+      html += `<div class="nivel${cheio ? " cheio" : ""}${i === esperado ? " esperado" : ""}"
+                    style="${cheio ? `background:${cor}` : ""}" title="Nível ${i}">${i}</div>`;
+    }
+    return `<div class="niveis" role="img" aria-label="Nível atual ${atual ?? "não registrado"}, esperado ${esperado}">${html}</div>`;
+  }
+
+  function trajetoria(e, anos, anoAtual) {
+    return `<span class="trajetoria" aria-label="Nível esperado por ano">${anos.map((ano) => {
+      const nivel = e.niveis_esperados[ano];
+      return `<span class="passo${ano === anoAtual ? " atual" : ""}"><b>${ano}</b>${nivel ?? "—"}</span>`;
+    }).join("")}</span>`;
+  }
+
+  function blocoEpas(epas) {
+    let corpo = "";
+    if (epas.mensagem) corpo += `<p class="aviso" style="margin-bottom:14px">${esc(epas.mensagem)}</p>`;
+
+    if (epas.itens.length) {
+      const comparar = epas.niveis_do_sistema;
+      let grupo = null, linhas = "";
+      for (const e of epas.itens) {
+        if (e.especialidade && e.especialidade !== grupo) {
+          grupo = e.especialidade;
+          linhas += `<p class="epa-grupo">${esc(grupo)}</p>`;
+        }
+        let detalhe;
+        if (comparar) {
+          const esperado = e.nivel_esperado
+            ? `Esperado no ${esc(e.ano_residente)}: nível ${e.nivel_esperado} (${esc(e.nivel_esperado_rotulo)})` : "";
+          const obs = e.observacoes_trimestre != null
+            ? `${e.observacoes_trimestre}${e.minimo_trimestre ? ` de ${e.minimo_trimestre}` : ""} observações no trimestre` : "";
+          detalhe = [esperado, obs].filter(Boolean).join(" · ");
+        } else {
+          detalhe = e.minimo_trimestre ? `Mínimo de ${e.minimo_trimestre} vezes por trimestre para certificar` : esc(e.regra_minimo || "");
+        }
+        linhas += `
+          <div class="epa-linha${comparar ? "" : " so-catalogo"}">
+            <span class="epa-codigo">${esc(e.codigo)}</span>
+            <span class="epa-nome">${esc(e.nome)}<small>${detalhe}</small></span>
+            ${trajetoria(e, epas.anos, epas.ano_residente)}
+            ${comparar ? barraNiveis(e.nivel_atual, e.nivel_esperado, 5, COR[e.situacao]) : ""}
+            ${comparar ? `<span class="situacao ${e.situacao}">${SITUACAO[e.situacao]}</span>` : ""}
+          </div>`;
+      }
+      const niveis = Object.entries(epas.niveis).map(([n, t]) => `<b>${n}</b> ${esc(t)}`).join(" · ");
+      const legenda = comparar ? `
+        <div class="legenda-epa">
+          <span><i class="amostra" style="background:${COR.atingido}"></i>No nível esperado</span>
+          <span><i class="amostra" style="background:${COR.abaixo}"></i>Abaixo do esperado</span>
+          <span><i class="amostra" style="background:#fff;box-shadow:0 0 0 2px #13262D"></i>Nível esperado no ano atual</span>
+          <span><i class="amostra" style="background:#D9ECE7;box-shadow:inset 0 0 0 2px #0F6157"></i>Ano atual na trajetória</span>
+        </div>` : "";
+      corpo += `
+        ${legenda}
+        <div class="bloco">${linhas}</div>
+        <p class="explica">Níveis de confiança: ${niveis}.</p>
+        <p class="explica">Fonte: ${esc(epas.fonte)}.</p>`;
+    }
+    const intro = epas.niveis_do_sistema
+      ? "Onde o residente está (barra preenchida) em comparação com onde deveria estar no ano atual (bloco contornado). R1, R2 e R3 mostram o nível esperado ao fim de cada ano."
+      : "Nível de autonomia esperado em cada EPA ao fim de cada ano da residência.";
+    return `
+      <section class="secao" id="epas">
+        <h2>Mapa das EPAs</h2>
+        <p class="explica">${intro}</p>
+        ${corpo}
+      </section>`;
+  }
+
+  function graficoEvolucao(inst) {
+    const L = 580, A = 200, esq = 34, dir = 168, base = 26, topo = 14;
+    const aL = L - esq - dir, aA = A - base - topo;
+    const soma = inst.agregacao === "soma";
+    const yMin = soma ? inst.total_minimo : inst.escala_min;
+    const yMax = soma ? inst.total_maximo : inst.escala_max;
+    const y = (v) => base + aA - ((v - yMin) / ((yMax - yMin) || 1)) * aA;
+    let svg = "";
+
+    if (inst.faixas.length) {
+      inst.faixas.forEach((f, i) => {
+        const y0 = y(i === 0 ? yMin : f.minimo);
+        const y1 = y(i + 1 < inst.faixas.length ? inst.faixas[i + 1].minimo : yMax);
+        svg += `<rect x="${esq}" y="${y1}" width="${aL}" height="${y0 - y1}" fill="${TONS_FAIXA[Math.min(i, 2)]}"/>`;
+        svg += `<text x="${esq + aL + 8}" y="${(y0 + y1) / 2 + 4}" font-size="11.5" fill="#53686E">${esc(f.texto)}</text>`;
+      });
+    } else {
+      svg += `<rect x="${esq}" y="${topo}" width="${aL}" height="${aA}" fill="#F4F6F5"/>`;
+    }
+    const marcas = [...new Set([yMin, yMax, ...inst.faixas.map((f) => f.minimo)])];
+    marcas.forEach((v) => {
+      svg += `<line x1="${esq}" x2="${esq + aL}" y1="${y(v)}" y2="${y(v)}" stroke="#fff"/>`;
+      svg += `<text x="${esq - 6}" y="${y(v) + 4}" font-size="12" text-anchor="end" fill="#53686E">${num(v)}</text>`;
+    });
+
+    const pts = inst.evolucao, n = pts.length;
+    const x = (i) => n === 1 ? esq + aL / 2 : esq + 14 + i * (aL - 28) / (n - 1);
+    if (n > 1) svg += `<polyline fill="none" stroke="#0F6157" stroke-width="2.5" points="${pts.map((p, i) => `${x(i)},${y(p.nota)}`).join(" ")}"/>`;
+    const passo = Math.max(1, Math.ceil(n / 8));
+    pts.forEach((p, i) => {
+      svg += `<circle cx="${x(i)}" cy="${y(p.nota)}" r="4.5" fill="#0A4740" stroke="#fff" stroke-width="1.5"><title>${data(p.data)}: ${num(p.nota)}</title></circle>`;
+      if (n <= 12 || i === n - 1) svg += `<text x="${x(i)}" y="${y(p.nota) - 9}" font-size="12" font-weight="700" text-anchor="middle" fill="#13262D">${num(p.nota)}</text>`;
+      if (i % passo === 0 || i === n - 1) svg += `<text x="${x(i)}" y="${A - 6}" font-size="11.5" text-anchor="middle" fill="#53686E">${dataCurta(p.data)}</text>`;
+    });
+    return `<svg class="grafico" viewBox="0 0 ${L} ${A}" role="img" aria-label="Evolução das notas de ${esc(inst.nome)}">${svg}</svg>`;
+  }
+
+  function blocoInstrumentos(lista) {
+    let corpo;
+    if (!lista.length) {
+      corpo = '<p class="aviso">Nenhuma avaliação OSATS, Mini-CEX ou NOTSS confirmada até o momento.</p>';
+    } else {
+      corpo = '<div class="grade-instrumentos">' + lista.map((inst) => {
+        const escala = inst.agregacao === "soma"
+          ? `Soma de ${inst.media_por_dominio.length} domínios, de ${inst.total_minimo} a ${inst.total_maximo}`
+          : `Média, de ${inst.escala_min} a ${inst.escala_max}`;
+        const dominios = inst.media_por_dominio.map((d) => {
+          const pct = d.media == null ? 0 : ((d.media - inst.escala_min) / ((inst.escala_max - inst.escala_min) || 1)) * 100;
+          return `<div class="dominio"><span>${esc(d.titulo)}</span>
+                    <span class="trilho"><span style="width:${Math.max(2, pct)}%"></span></span>
+                    <span class="valor">${num(d.media)}/${inst.escala_max}</span></div>`;
+        }).join("");
+        const chips = inst.faixas.length
+          ? `<div class="chips">${inst.faixas.map((f) => `<span class="chip">${esc(f.texto)}: <b>${f.quantidade}</b></span>`).join("")}</div>`
+          : (inst.codigo === "notss" ? '<p class="sub" style="margin-top:10px">NOTSS ainda sem faixas de corte no documento técnico.</p>' : "");
+        return `
+          <article class="bloco">
+            <h3>${esc(inst.nome)}</h3>
+            <p class="sub">${esc(escala)}${inst.ultima_faixa ? ` · faixa atual: <b>${esc(inst.ultima_faixa)}</b>` : ""}</p>
+            <div class="numeros">
+              <div><strong>${inst.quantidade}</strong>avaliações</div>
+              <div><strong>${num(inst.media)}</strong>média</div>
+              <div><strong>${num(inst.ultima_nota)}</strong>última</div>
+              <div><strong>${num(inst.melhor)}</strong>melhor</div>
+            </div>
+            ${graficoEvolucao(inst)}
+            <div class="dominios">${dominios}</div>
+            ${chips}
+          </article>`;
+      }).join("") + "</div>";
+    }
+    return `
+      <section class="secao" id="instrumentos">
+        <h2>Desempenho por instrumento</h2>
+        <p class="explica">Evolução das notas ao longo do tempo, com as faixas de corte ao fundo, e a média de cada domínio.</p>
+        ${corpo}
+      </section>`;
+  }
+
+  function blocoZwisch(etapas) {
+    const pips = (n) => `<span class="pips" role="img" aria-label="Z${n}">${[1, 2, 3, 4].map((i) => `<i class="${i <= n ? "cheio" : ""}"></i>`).join("")}</span>`;
+    const corpo = !etapas.length
+      ? '<p class="aviso">Nenhuma avaliação Zwisch confirmada até o momento.</p>'
+      : `<div class="bloco tabela-rolagem"><table class="tabela">
+          <thead><tr><th>Etapa cirúrgica</th><th>Nível atual</th><th></th><th>Histórico</th><th>Avaliações</th><th>Última</th></tr></thead>
+          <tbody>${etapas.map((e) => `
+            <tr><td>${esc(e.etapa)}</td><td>${pips(e.nivel_atual)}</td><td class="num">${esc(e.nivel_texto || "")}</td>
+                <td>${e.historico.map((n) => "Z" + n).join(" → ")}</td><td>${e.quantidade}</td><td>${data(e.ultima_data)}</td></tr>`).join("")}
+          </tbody></table></div>`;
+    return `
+      <section class="secao" id="zwisch">
+        <h2>Autonomia cirúrgica por etapa (Zwisch)</h2>
+        <p class="explica">Nível mais recente em cada etapa: Z1 show and tell · Z2 active help · Z3 passive help · Z4 supervision only.</p>
+        ${corpo}
+      </section>`;
+  }
+
+  function blocoProcedimentos(proc) {
+    const cards = proc.por_participacao.map((c) =>
+      `<div class="kpi"><p class="numero">${c.quantidade}</p><p class="legenda">${esc(c.texto)}</p></div>`).join("");
+    const tabela = !proc.por_nome.length
+      ? '<p class="aviso">Nenhum procedimento validado até o momento.</p>'
+      : `<div class="bloco tabela-rolagem"><table class="tabela">
+          <thead><tr><th>Procedimento</th><th>Total</th><th>Cirurgião principal</th><th>1º auxiliar</th><th>2º auxiliar</th></tr></thead>
+          <tbody>${proc.por_nome.map((l) => `
+            <tr><td>${esc(l.nome)}</td><td class="num">${l.total}</td><td>${l.cirurgiao_principal}</td>
+                <td>${l.primeiro_auxiliar}</td><td>${l.segundo_auxiliar}</td></tr>`).join("")}
+          </tbody></table></div>`;
+    return `
+      <section class="secao" id="procedimentos">
+        <h2>Procedimentos realizados</h2>
+        <p class="explica"><b>${proc.total_validados}</b> validado(s) por preceptor. Não contam na estatística:
+          ${proc.pendentes} aguardando validação e ${proc.recusados} recusado(s).</p>
+        <div class="participacao">${cards}</div>
+        ${tabela}
+      </section>`;
+  }
+
+  function blocoHistorico(lista) {
+    const corpo = !lista.length
+      ? '<p class="aviso">Nenhuma avaliação confirmada até o momento.</p>'
+      : `<div class="bloco tabela-rolagem"><table class="tabela">
+          <thead><tr><th>Data</th><th>Instrumento</th><th>Avaliador</th><th>Resultado</th><th>Faixa / etapa</th><th>Integridade</th></tr></thead>
+          <tbody>${lista.map((a) => {
+            const zw = a.instrumento === "zwisch";
+            const obs = (a.observacoes || "").trim();
+            return `
+              <tr class="${obs ? "tem-feedback" : ""}">
+                <td>${data(a.data)}</td><td class="num">${esc(a.instrumento_nome)}</td><td>${esc(a.avaliador_nome)}</td>
+                <td class="num">${zw ? "Z" + num(a.nota) : `${num(a.nota)}/${a.total_maximo}`}</td>
+                <td>${esc(zw ? a.etapa_cirurgica : (a.faixa_texto || "—"))}</td>
+                <td class="hash" title="${esc(a.hash_integridade)}">${esc((a.hash_integridade || "").slice(0, 12))}</td>
+              </tr>
+              ${obs ? `<tr class="feedback"><td colspan="6">“${esc(obs)}”</td></tr>` : ""}`;
+          }).join("")}</tbody></table></div>`;
+    return `
+      <section class="secao" id="historico">
+        <h2>Histórico de avaliações e feedback</h2>
+        <p class="explica">Somente avaliações confirmadas pelo avaliador. Cada uma é imutável e identificada pelo código de integridade (SHA-256).</p>
+        ${corpo}
+      </section>`;
+  }
+
+  iniciar();
+</script>
+</body>
+</html>

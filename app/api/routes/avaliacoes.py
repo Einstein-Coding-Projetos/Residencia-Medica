@@ -4,9 +4,11 @@ import json
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status, BackgroundTasks
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+
+from app.core.anomalias_service import registrar_alertas_heuristicas
 
 from app.api.deps import SomenteAvaliador, SomenteResidente, UsuarioAtual
 from app.core.auth_service import registrar_auditoria
@@ -22,7 +24,7 @@ from app.core.instrumentos import (
     validar_zwisch,
 )
 from app.core.permissoes_avaliacao import exigir_pode_avaliar, exigir_pode_avaliar_setq
-from app.db.models import EPA, Avaliacao, Papel, Usuario, agora_utc
+from app.db.models import Avaliacao, Papel, Usuario, Alocacao, agora_utc
 from app.db.session import get_db
 from app.schemas.avaliacoes import (
     AvaliacaoCriar,
@@ -79,7 +81,6 @@ def _montar_resposta(avaliacao: Avaliacao) -> dict:
         "faixa_rotulo": avaliacao.faixa_rotulo,
         "faixa_descricao": faixa_descricao,
         "etapa_cirurgica": avaliacao.etapa_cirurgica,
-        "epa_id": avaliacao.epa_id,
         "confirmado": avaliacao.confirmado,
         "hash_integridade": avaliacao.hash_integridade,
         "declaracao_observacao": avaliacao.declaracao_observacao,
@@ -123,18 +124,6 @@ def criar_avaliacao(
 
     exigir_pode_avaliar(avaliador, residente)
 
-    if dados.epa_id is not None:
-        epa = db.get(EPA, dados.epa_id)
-
-        if epa is None or not epa.ativo:
-            raise HTTPException(status_code=404, detail="EPA não encontrada.")
-
-        if residente.programa_id != epa.programa_id:
-            raise HTTPException(
-                status_code=400,
-                detail="EPA não pertence ao programa do residente.",
-            )
-
     if instrumento.codigo == "zwisch":
         try:
             validar_zwisch(instrumento, dados.etapa_cirurgica, dados.nivel_autonomia)
@@ -163,7 +152,6 @@ def criar_avaliacao(
         itens=json.dumps(itens_json, ensure_ascii=False),
         observacoes=dados.observacoes,
         etapa_cirurgica=etapa_cirurgica,
-        epa_id=dados.epa_id,
         nota=resultado.valor,
         faixa_rotulo=resultado.faixa_rotulo,
         confirmado=False,
@@ -200,12 +188,14 @@ def criar_avaliacao(
     response_model=AvaliacaoPublica,
     summary="Confirmar envio da avaliação (torna o registro imutável)",
 )
+
 def confirmar_avaliacao(
     avaliacao_id: uuid.UUID,
     corpo: ConfirmarAvaliacao,
     request: Request,
     usuario: UsuarioAtual,
     db: Annotated[Session, Depends(get_db)],
+    background_tasks: BackgroundTasks,
 ):
     avaliacao = db.get(Avaliacao, avaliacao_id)
 
@@ -242,6 +232,28 @@ def confirmar_avaliacao(
         exigir_pode_avaliar_setq(usuario, sujeito)
     else:
         exigir_pode_avaliar(usuario, sujeito)
+
+    # --- INÍCIO DA REGRA DE CRUZAMENTO DE ALOCAÇÃO ---
+    alocacao_residente = db.scalar(
+        select(Alocacao.servico_id)
+        .where(Alocacao.usuario_id == avaliacao.residente_id)
+        .where(Alocacao.data_inicio <= avaliacao.data_atividade)
+        .where(Alocacao.data_fim >= avaliacao.data_atividade)
+    )
+
+    alocacao_avaliador = db.scalar(
+        select(Alocacao.servico_id)
+        .where(Alocacao.usuario_id == usuario.id) # O avaliador autenticado
+        .where(Alocacao.data_inicio <= avaliacao.data_atividade)
+        .where(Alocacao.data_fim >= avaliacao.data_atividade)
+    )
+
+    if not alocacao_residente or not alocacao_avaliador or (alocacao_residente != alocacao_avaliador):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Avaliador e residente não estavam alocados no mesmo serviço na data da atividade."
+        )
+    # --- FIM DA REGRA DE CRUZAMENTO DE ALOCAÇÃO ---
 
     avaliacao.declaracao_observacao = instrumento.texto_confirmacao
 
@@ -286,10 +298,21 @@ def confirmar_avaliacao(
     )
 
     db.commit()
+    
+    # --- INÍCIO DA HEURÍSTICA EM BACKGROUND ---
+    if getattr(corpo, "tempo_preenchimento_segundos", None) is not None:
+        background_tasks.add(
+            registrar_alertas_heuristicas,
+            db, 
+            avaliacao.id,
+            usuario.id,
+            corpo.tempo_preenchimento_segundos
+        )
+    # --- FIM DA HEURÍSTICA EM BACKGROUND ---
+    
     db.refresh(avaliacao)
 
     return _montar_resposta(avaliacao)
-
 
 @router.get(
     "/{avaliacao_id}",

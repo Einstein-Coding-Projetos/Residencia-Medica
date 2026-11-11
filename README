@@ -61,25 +61,6 @@ rms-brasil/
 - PostgreSQL 15+ (local ou via Docker)
 - Acesso ao repositório no GitHub
 
-### Banco de dados (Alembic)
-
-O schema é versionado por Alembic — `app/main.py` **não** cria mais as
-tabelas sozinho. Depois de `pip install -r requirements.txt`, rode
-`alembic upgrade head` antes do primeiro boot da API (e sempre que uma
-migração nova for adicionada ao repositório):
-
-```bash
-pip install -r requirements.txt
-alembic upgrade head
-python seed.py             # contas de teste
-python seed_portfolio.py   # histórico fictício da Ana (opcional)
-uvicorn app.main:app --reload
-```
-
-Para gerar uma nova migração depois de alterar `app/db/models.py`:
-`alembic revision --autogenerate -m "descrição"`, revisar o arquivo
-gerado em `alembic/versions/` antes de commitar.
-
 
 ## Fluxo de trabalho (Git)
 

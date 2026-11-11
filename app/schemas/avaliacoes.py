@@ -28,10 +28,7 @@ class AvaliacaoCriar(BaseModel):
     # (ver app.core.instrumentos.validar_zwisch).
     etapa_cirurgica: str | None = None
     nivel_autonomia: int | None = None
-
-    # EPA que esta avaliação documenta (opcional). Quando confirmada, conta
-    # como uma observação para o mínimo trimestral daquela EPA.
-    epa_id: uuid.UUID | None = None
+    tempo_preenchimento_segundos: int | None = Field(default=None, description="Tempo em segundos que o avaliador levou preenchendo a ficha")
 
 
 class ConfirmarAvaliacao(BaseModel):
@@ -64,7 +61,6 @@ class AvaliacaoPublica(BaseModel):
     faixa_rotulo: str | None = None
     faixa_descricao: str | None = None
     etapa_cirurgica: str | None = None
-    epa_id: uuid.UUID | None = None
     confirmado: bool
     hash_integridade: str | None = None
     declaracao_observacao: str | None = None
