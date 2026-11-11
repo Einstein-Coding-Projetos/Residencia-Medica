@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -28,7 +28,15 @@ class AvaliacaoCriar(BaseModel):
     # (ver app.core.instrumentos.validar_zwisch).
     etapa_cirurgica: str | None = None
     nivel_autonomia: int | None = None
-    tempo_preenchimento_segundos: int | None = Field(default=None, description="Tempo em segundos que o avaliador levou preenchendo a ficha")
+
+    # EPA que esta avaliação documenta (opcional). Quando confirmada, conta
+    # como uma observação para o mínimo trimestral daquela EPA.
+    epa_id: uuid.UUID | None = None
+
+    # Data em que a atividade foi observada. Se omitida, vale a data de
+    # hoje. Na confirmação o sistema exige que avaliador e residente
+    # estivessem alocados no mesmo serviço nesta data.
+    data_atividade: date | None = None
 
 
 class ConfirmarAvaliacao(BaseModel):
@@ -44,6 +52,10 @@ class ConfirmarAvaliacao(BaseModel):
             "atividade na data informada."
         )
     )
+
+    # Medido pelo frontend (abertura da ficha -> envio). Opcional; quando
+    # informado alimenta o alerta de preenchimento rápido demais.
+    tempo_preenchimento_segundos: int | None = Field(default=None, ge=0)
 
 
 class AvaliacaoPublica(BaseModel):
@@ -61,6 +73,8 @@ class AvaliacaoPublica(BaseModel):
     faixa_rotulo: str | None = None
     faixa_descricao: str | None = None
     etapa_cirurgica: str | None = None
+    epa_id: uuid.UUID | None = None
+    data_atividade: date | None = None
     confirmado: bool
     hash_integridade: str | None = None
     declaracao_observacao: str | None = None

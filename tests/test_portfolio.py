@@ -17,6 +17,7 @@ from app.core.instrumentos import obter_instrumento
 from app.db.models import Base, Especialidade, LogAuditoria, Papel, Programa, Usuario
 from app.db.session import get_db
 from app.main import app
+from tests.utils_alocacao import alocar_no_mesmo_servico
 
 API = "/api/v1"
 
@@ -56,6 +57,7 @@ def amb(monkeypatch):
         "admin": usuario(Papel.ADMINISTRADOR, "Carla Admin"),
         "db": db,
     }
+    alocar_no_mesmo_servico(db, progs[0], ctx["preceptor"], ctx["residente"], ctx["outro_residente"])
     db.commit()
     estado = {"usuario": ctx["residente"]}
     app.dependency_overrides[get_db] = lambda: db

@@ -15,6 +15,7 @@ from app.api.deps import usuario_atual
 from app.db.models import Base, Especialidade, Papel, Programa, Usuario
 from app.db.session import get_db
 from app.main import app
+from tests.utils_alocacao import alocar_no_mesmo_servico
 
 
 @pytest.fixture()
@@ -62,6 +63,7 @@ def ambiente():
     db.add(outro_programa)
     db.flush()
     residente_outro_programa = _usuario(Papel.RESIDENTE, outro_programa.id)
+    alocar_no_mesmo_servico(db, programa, preceptor, residente)
     db.commit()
 
     estado = {"usuario": preceptor}
