@@ -15,6 +15,7 @@ from app.core.auth_service import registrar_auditoria
 from app.core.confirmar_registro import confirmar_registro
 from app.core.contexto_service import servico_em_comum
 from app.core.immutability import bloquear_se_confirmado
+from app.core.notificacoes_service import notificar
 from app.core.instrumentos import (
     InstrumentoDesconhecido,
     ItensInvalidos,
@@ -304,6 +305,19 @@ def confirmar_avaliacao(
     db.flush()
 
     alertas = analisar_avaliacao(db, avaliacao, corpo.tempo_preenchimento_segundos)
+
+    if instrumento.codigo != "setq_smart":
+        notificar(
+            db,
+            avaliacao.residente_id,
+            tipo="avaliacao_recebida",
+            titulo=f"Nova avaliação {instrumento.nome} recebida",
+            mensagem=(
+                f"{usuario.nome} enviou uma avaliação. Se discordar, você tem "
+                "7 dias para registrar discordância formal."
+            ),
+            referencia={"avaliacao_id": str(avaliacao.id)},
+        )
 
     registrar_auditoria(
         db,

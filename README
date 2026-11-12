@@ -80,6 +80,24 @@ Para gerar uma nova migração depois de alterar `app/db/models.py`:
 `alembic revision --autogenerate -m "descrição"`, revisar o arquivo
 gerado em `alembic/versions/` antes de commitar.
 
+### Governança (Sprint 4)
+
+- **Alocações:** o administrador cadastra em `POST /api/v1/alocacoes` quem
+  está em qual serviço e em que período. Sem alocação de avaliador e
+  residente no mesmo serviço na data da atividade, a avaliação não pode
+  ser confirmada (o `seed.py` já aloca as contas de teste na Enfermaria).
+- **Job diário de engajamento** (alertas D15/D20/D25, escalada ao
+  administrador e registro de omissão ao fechar o mês). Agendar uma vez
+  por dia (cron ou Agendador de Tarefas do Windows):
+
+  ```bash
+  python -m app.jobs.verificar_engajamento             # hoje
+  python -m app.jobs.verificar_engajamento 2026-09-25  # simula outro dia
+  ```
+
+  O administrador também pode disparar pelo painel (aba Governança) ou
+  por `POST /api/v1/engajamento/verificar`.
+
 
 ## Fluxo de trabalho (Git)
 

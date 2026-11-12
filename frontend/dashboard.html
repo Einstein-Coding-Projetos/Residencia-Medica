@@ -28,12 +28,14 @@
     </header>
 
     <main class="corpo-painel">
-      <div class="grade-cartoes" id="grade"></div>
+      <div id="area"></div>
     </main>
   </div>
 </div>
 
 <script>
+  const API = "http://localhost:8000/api/v1";
+
   const ROTULOS_PAPEL = {
     residente: "Residente",
     preceptor: "Preceptor",
@@ -41,37 +43,62 @@
     administrador: "Administrador",
   };
 
-  // Base do painel: cada papel enxerga só as seções que fazem sentido
-  // para ele. Os cartões ainda são placeholder — as telas de verdade
-  // (fichas de avaliação, portfólio, etc.) chegam nos próximos sprints.
+  const ROTULOS_ALERTA = {
+    velocidade_suspeita: "Preenchimento rápido demais",
+    volume_atipico: "Volume atípico no dia",
+    notas_uniformes: "Notas sempre iguais",
+    leniencia: "Notas muito acima dos demais",
+  };
+
+  // Cada papel vê só as seções que fazem sentido para ele. `render` monta
+  // a seção com dados da API; `link` leva para outra tela.
   const SECOES_POR_PAPEL = {
     residente: [
-      { titulo: "Portfólio", descricao: "Notas, progressão por EPA, procedimentos e exportação em PDF.", link: "portfolio.html" },
-      { titulo: "Avaliações recebidas", descricao: "Feedback dos seus preceptores." },
-      { titulo: "Frequência", descricao: "Check-in e check-out do dia." },
+      { titulo: "Painel", render: () => painelResidente() },
+      { titulo: "Avaliações recebidas", render: () => avaliacoesRecebidas() },
+      { titulo: "Notificações", render: () => notificacoes() },
+      { titulo: "Portfólio", link: "portfolio.html" },
     ],
     preceptor: [
-      { titulo: "Avaliações a aplicar", descricao: "Prazos e residentes pendentes de avaliação." },
-      { titulo: "Meus residentes", descricao: "Portfólio dos residentes do seu programa.", link: "portfolio.html" },
+      { titulo: "Painel", render: () => painelAvaliador() },
+      { titulo: "Discordâncias", render: () => discordanciasAvaliador() },
+      { titulo: "Notificações", render: () => notificacoes() },
+      { titulo: "Meus residentes", link: "portfolio.html" },
     ],
     avaliador_intermediario: [
-      { titulo: "Avaliações a aplicar", descricao: "Prazos e residentes pendentes de avaliação." },
-      { titulo: "Meus residentes", descricao: "Portfólio dos residentes do seu programa.", link: "portfolio.html" },
+      { titulo: "Painel", render: () => painelAvaliador() },
+      { titulo: "Discordâncias", render: () => discordanciasAvaliador() },
+      { titulo: "Notificações", render: () => notificacoes() },
+      { titulo: "Meus residentes", link: "portfolio.html" },
     ],
     administrador: [
-      { titulo: "Cadastros", descricao: "Programas, especialidades e serviços." },
-      { titulo: "Usuários", descricao: "Contas de residentes, preceptores e administradores." },
-      { titulo: "Auditoria", descricao: "Trilha de ações registradas no sistema." },
-      { titulo: "Portfólios", descricao: "Portfólio de cada residente, com exportação em PDF.", link: "portfolio.html" },
+      { titulo: "Painel", render: () => painelAdmin() },
+      { titulo: "Governança", render: () => governanca() },
+      { titulo: "Notificações", render: () => notificacoes() },
+      { titulo: "Portfólios", link: "portfolio.html" },
     ],
   };
 
+  let sessao = null;
+
+  // ------------------------------------------------------------ utilidades
+  const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const data = (iso) => {
+    if (!iso) return "—";
+    const d = iso.length === 10 ? new Date(iso + "T12:00:00") : new Date(/Z|\+/.test(iso) ? iso : iso + "Z");
+    return d.toLocaleDateString("pt-BR");
+  };
+  const num = (v) => Number.isInteger(v) ? String(v) : Number(v).toFixed(1).replace(".", ",");
+  const kpi = (valor, rotulo, atencao = false) =>
+    `<div class="kpi${atencao ? " atencao" : ""}"><p class="valor">${esc(valor)}</p><p class="rotulo">${esc(rotulo)}</p></div>`;
+  const bloco = (titulo, corpo) => `<section class="bloco"><h2>${esc(titulo)}</h2>${corpo}</section>`;
+  const vazio = (texto) => `<p class="vazio">${esc(texto)}</p>`;
+  const area = () => document.getElementById("area");
+
   function carregarSessao() {
     const bruto = sessionStorage.getItem("sessao");
-    if (!bruto) {
-      window.location.href = "login.html";
-      return null;
-    }
+    if (!bruto) { window.location.href = "login.html"; return null; }
     return JSON.parse(bruto);
   }
 
@@ -80,21 +107,198 @@
     window.location.href = "login.html";
   }
 
+  async function api(caminho, opcoes = {}) {
+    const r = await fetch(API + caminho, {
+      ...opcoes,
+      headers: { Authorization: `Bearer ${sessao.access_token}`, "Content-Type": "application/json" },
+    });
+    if (r.status === 401) { sair(); throw new Error("Sessão expirada."); }
+    const corpo = r.status === 204 ? null : await r.json().catch(() => null);
+    if (!r.ok) {
+      const d = corpo?.detail;
+      throw new Error(typeof d === "string" ? d : "Não foi possível concluir a operação.");
+    }
+    return corpo;
+  }
+
+  // ------------------------------------------------------------ residente
+  async function painelResidente() {
+    const p = await api("/dashboard");
+    const cert = p.certificacao;
+    const abaixo = p.epas.abaixo_do_esperado;
+    return `
+      ${cert.bloqueada ? `<div class="faixa-alerta"><strong>Certificação bloqueada.</strong> ${esc(cert.motivo)}</div>` : ""}
+      <div class="kpis">
+        ${kpi(p.avaliacoes_no_mes, "avaliações neste mês")}
+        ${kpi(p.avaliacoes_recebidas, "avaliações no total")}
+        ${kpi(`${p.epas.dentro_do_esperado}/${p.epas.total}`, "EPAs no nível esperado", abaixo.length > 0)}
+        ${kpi(p.notificacoes_nao_lidas, "notificações não lidas")}
+      </div>
+      ${bloco("EPAs abaixo do esperado", abaixo.length
+        ? `<ul class="lista">${abaixo.map((e) => `<li>${esc(e.codigo)} — ${esc(e.titulo)}
+            <div class="meta">Nível atual ${e.nivel_atual} · esperado ${e.nivel_esperado}</div></li>`).join("")}</ul>`
+        : vazio("Todas as EPAs estão no nível esperado para o seu ano."))}
+      ${bloco("Discordâncias", vazio(`${p.discordancias.abertas} aguardando resposta · ${p.discordancias.respondidas} respondida(s)`))}`;
+  }
+
+  async function avaliacoesRecebidas() {
+    const p = await api("/dashboard");
+    if (!p.ultimas_avaliacoes.length) return bloco("Últimas avaliações", vazio("Você ainda não recebeu avaliações."));
+    const itens = p.ultimas_avaliacoes.map((a) => `
+      <li>
+        <strong>${esc(a.instrumento_nome)}</strong> · nota ${num(a.nota)}${a.faixa_rotulo ? ` (${esc(a.faixa_rotulo)})` : ""}
+        <div class="meta">${esc(a.avaliador_nome)} · atividade em ${data(a.data_atividade)}
+          ${a.discordancia_registrada ? " · discordância registrada" : ""}</div>
+        ${a.pode_discordar_ate ? `
+          <div class="form-texto" id="form-${a.id}" hidden>
+            <textarea id="motivo-${a.id}" placeholder="Explique por que discorda (mínimo de 20 caracteres)."></textarea>
+            <button class="acao" onclick="enviarDiscordancia('${a.id}')">Enviar discordância formal</button>
+          </div>
+          <button class="acao secundaria" id="abrir-${a.id}" onclick="abrirForm('${a.id}')">
+            Discordar (até ${data(a.pode_discordar_ate)})</button>` : ""}
+      </li>`).join("");
+    return bloco("Últimas avaliações", `<ul class="lista">${itens}</ul>`);
+  }
+
+  function abrirForm(id) {
+    document.getElementById(`form-${id}`).hidden = false;
+    document.getElementById(`abrir-${id}`).hidden = true;
+  }
+
+  async function enviarDiscordancia(id) {
+    const motivo = document.getElementById(`motivo-${id}`).value.trim();
+    try {
+      await api(`/avaliacoes/${id}/discordancia`, { method: "POST", body: JSON.stringify({ motivo }) });
+      alert("Discordância registrada. O avaliador e a coordenação foram notificados.");
+      recarregar();
+    } catch (e) { alert(e.message); }
+  }
+
+  // ------------------------------------------------------------ preceptor / R4-R5
+  async function painelAvaliador() {
+    const p = await api("/dashboard");
+    const pend = p.pendencias_do_mes;
+    const residentes = p.residentes_alocados_hoje;
+    return `
+      <div class="kpis">
+        ${pend ? kpi(pend.length, "residentes sem avaliação no mês", pend.length > 0) : ""}
+        ${kpi(p.avaliacoes_confirmadas_no_mes, "avaliações enviadas no mês")}
+        ${kpi(p.rascunhos_nao_enviados, "rascunhos não enviados", p.rascunhos_nao_enviados > 0)}
+        ${kpi(p.discordancias_aguardando_resposta.length, "discordâncias a responder", p.discordancias_aguardando_resposta.length > 0)}
+      </div>
+      ${pend ? bloco("Avaliações obrigatórias pendentes neste mês", pend.length
+        ? `<ul class="lista">${pend.map((x) => `<li>${esc(x.residente_nome)}
+            ${x.marcos_disparados.map((m) => `<span class="marco">${esc(m)}</span>`).join("")}</li>`).join("")}</ul>`
+        : vazio("Nenhuma pendência: todos os residentes do seu serviço já foram avaliados neste mês.")) : ""}
+      ${bloco("Residentes no seu serviço hoje", residentes.length
+        ? `<ul class="lista">${residentes.map((r) => `<li>${esc(r.nome)} <span class="meta">· ${esc(r.servico)}</span></li>`).join("")}</ul>`
+        : vazio("Você não tem alocação em serviço hoje. Fale com a administração."))}`;
+  }
+
+  async function discordanciasAvaliador() {
+    const lista = await api("/discordancias");
+    if (!lista.length) return bloco("Discordâncias sobre suas avaliações", vazio("Nenhuma discordância registrada."));
+    const itens = lista.map((d) => `
+      <li>
+        <div class="meta">Registrada em ${data(d.criada_em)} · ${d.status === "aberta" ? "aguardando sua resposta" : "respondida"}</div>
+        <p>${esc(d.motivo)}</p>
+        ${d.status === "aberta" ? `
+          <div class="form-texto">
+            <textarea id="resp-${d.id}" placeholder="Resposta formal (mínimo de 10 caracteres)."></textarea>
+            <button class="acao" onclick="responder('${d.id}')">Enviar resposta</button>
+          </div>` : `<p class="meta">Sua resposta: ${esc(d.resposta)}</p>`}
+      </li>`).join("");
+    return bloco("Discordâncias sobre suas avaliações", `<ul class="lista">${itens}</ul>`);
+  }
+
+  async function responder(id) {
+    const resposta = document.getElementById(`resp-${id}`).value.trim();
+    try {
+      await api(`/discordancias/${id}/resposta`, { method: "POST", body: JSON.stringify({ resposta }) });
+      recarregar();
+    } catch (e) { alert(e.message); }
+  }
+
+  // ------------------------------------------------------------ administrador
+  async function painelAdmin() {
+    const p = await api("/dashboard");
+    const papeis = p.usuarios_por_papel;
+    const alertas = Object.values(p.alertas_anomalia_30_dias).reduce((a, b) => a + b, 0);
+    return `
+      <div class="kpis">
+        ${kpi(p.avaliacoes_confirmadas_no_mes, "avaliações confirmadas no mês")}
+        ${kpi(p.pendencias_do_mes, "pares sem avaliação no mês", p.pendencias_do_mes > 0)}
+        ${kpi(p.escaladas_d25_no_mes, "escaladas D25 no mês", p.escaladas_d25_no_mes > 0)}
+        ${kpi(p.residentes_com_certificacao_bloqueada, "residentes com certificação bloqueada", p.residentes_com_certificacao_bloqueada > 0)}
+        ${kpi(alertas, "alertas de anomalia (30 dias)", alertas > 0)}
+        ${kpi(p.discordancias_abertas, "discordâncias abertas")}
+      </div>
+      ${bloco("Usuários ativos", `<ul class="lista">${Object.entries(papeis).map(([k, v]) =>
+        `<li>${esc(ROTULOS_PAPEL[k] ?? k)}: <strong>${v}</strong></li>`).join("")}</ul>`)}`;
+  }
+
+  async function governanca() {
+    const [alertas, omissoes, pendencias] = await Promise.all([
+      api("/alertas-anomalia"), api("/engajamento/omissoes"), api("/engajamento/pendencias"),
+    ]);
+    return `
+      ${bloco("Pendências de avaliação neste mês", pendencias.length
+        ? `<ul class="lista">${pendencias.map((x) => `<li>${esc(x.preceptor_nome)} → ${esc(x.residente_nome)}
+            ${x.marcos_disparados.map((m) => `<span class="marco">${esc(m)}</span>`).join("")}</li>`).join("")}</ul>`
+        : vazio("Nenhuma pendência neste mês."))}
+      ${bloco("Omissões registradas", omissoes.length
+        ? `<ul class="lista">${omissoes.map((o) => `<li>Mês ${data(o.competencia).slice(3)}
+            <div class="meta">${o.ativa ? "bloqueando a certificação" : "suprida por lançamento tardio"}</div></li>`).join("")}</ul>`
+        : vazio("Nenhuma omissão registrada."))}
+      ${bloco("Alertas de padrão anômalo", alertas.length
+        ? `<ul class="lista">${alertas.slice(0, 30).map((a) => `<li>${esc(ROTULOS_ALERTA[a.tipo_alerta] ?? a.tipo_alerta)}
+            <div class="meta">${data(a.criado_em)} · avaliador ${esc(a.avaliador_id.slice(0, 8))}</div></li>`).join("")}</ul>`
+        : vazio("Nenhum alerta. As heurísticas comparativas precisam de algumas semanas de uso para ter base."))}
+      <button class="acao" onclick="rodarVerificacao()">Rodar verificação de engajamento agora</button>`;
+  }
+
+  async function rodarVerificacao() {
+    try {
+      const r = await api("/engajamento/verificar", { method: "POST" });
+      alert(`Verificação concluída: ${r.alertas_criados.length} alerta(s), ${r.escaladas} escalada(s), ${r.omissoes_registradas.length} omissão(ões).`);
+      recarregar();
+    } catch (e) { alert(e.message); }
+  }
+
+  // ------------------------------------------------------------ comum
+  async function notificacoes() {
+    const lista = await api("/notificacoes");
+    if (!lista.length) return bloco("Notificações", vazio("Nenhuma notificação."));
+    const itens = lista.map((n) => `
+      <li class="${n.lida_em ? "" : "nao-lida"}">
+        ${esc(n.titulo)}
+        <div class="meta">${data(n.criado_em)}${n.mensagem ? " · " + esc(n.mensagem) : ""}</div>
+        ${n.lida_em ? "" : `<button class="acao secundaria" onclick="marcarLida('${n.id}')">Marcar como lida</button>`}
+      </li>`).join("");
+    return bloco("Notificações", `<ul class="lista">${itens}</ul>`);
+  }
+
+  async function marcarLida(id) {
+    try { await api(`/notificacoes/${id}/lida`, { method: "POST" }); recarregar(); }
+    catch (e) { alert(e.message); }
+  }
+
+  // ------------------------------------------------------------ navegação
+  let indiceAtual = 0;
+
   function montarPainel() {
-    const sessao = carregarSessao();
+    sessao = carregarSessao();
     if (!sessao) return;
 
     const { usuario } = sessao;
     document.getElementById("nomeUsuario").textContent = usuario.nome;
-    document.getElementById("papelUsuario").textContent =
-      ROTULOS_PAPEL[usuario.papel] ?? usuario.papel;
+    document.getElementById("papelUsuario").textContent = ROTULOS_PAPEL[usuario.papel] ?? usuario.papel;
 
     const secoes = SECOES_POR_PAPEL[usuario.papel] ?? [];
-
     const nav = document.getElementById("itensNav");
     secoes.forEach((secao, i) => {
       const botao = document.createElement("button");
-      botao.className = "nav-item" + (i === 0 ? " ativo" : "");
+      botao.className = "nav-item";
       botao.textContent = secao.titulo;
       botao.onclick = () => selecionar(i);
       nav.appendChild(botao);
@@ -104,25 +308,22 @@
     selecionar(0);
   }
 
-  function selecionar(indice) {
-    const secoes = window._secoes;
-    document.querySelectorAll(".nav-item").forEach((el, i) => {
-      el.classList.toggle("ativo", i === indice);
-    });
-    document.getElementById("tituloSecao").textContent = secoes[indice].titulo;
+  function recarregar() { selecionar(indiceAtual); }
 
-    const grade = document.getElementById("grade");
-    grade.innerHTML = "";
-    const cartao = document.createElement("div");
-    cartao.className = "cartao";
-    const secao = secoes[indice];
-    if (secao.link) {
-      cartao.innerHTML = `<h3>${secao.titulo}</h3><p>${secao.descricao}</p><p style="margin-top:12px;color:var(--cirurgico);font-weight:700">Abrir →</p>`;
-      cartao.onclick = () => { window.location.href = secao.link; };
-    } else {
-      cartao.innerHTML = `<h3>${secao.titulo}</h3><p>${secao.descricao} — disponível em um próximo sprint.</p>`;
+  async function selecionar(indice) {
+    const secao = window._secoes[indice];
+    if (secao.link) { window.location.href = secao.link; return; }
+
+    indiceAtual = indice;
+    document.querySelectorAll(".nav-item").forEach((el, i) => el.classList.toggle("ativo", i === indice));
+    document.getElementById("tituloSecao").textContent = secao.titulo;
+
+    area().innerHTML = vazio("Carregando…");
+    try {
+      area().innerHTML = `<div class="secao-painel">${await secao.render()}</div>`;
+    } catch (e) {
+      area().innerHTML = `<div class="faixa-alerta">${esc(e.message)}</div>`;
     }
-    grade.appendChild(cartao);
   }
 
   montarPainel();

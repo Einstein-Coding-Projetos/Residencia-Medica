@@ -11,9 +11,13 @@ from app.api.routes import (
     alocacoes,
     auth,
     avaliacoes,
+    dashboard,
+    discordancias,
+    engajamento,
     epas,
     especialidades,
     instrumentos,
+    notificacoes,
     portfolio,
     procedimentos,
     programas,
@@ -56,6 +60,10 @@ app.include_router(portfolio.router, prefix=settings.API_PREFIX)
 app.include_router(epas.router, prefix=settings.API_PREFIX)
 app.include_router(alocacoes.router, prefix=settings.API_PREFIX)
 app.include_router(alertas.router, prefix=settings.API_PREFIX)
+app.include_router(engajamento.router, prefix=settings.API_PREFIX)
+app.include_router(notificacoes.router, prefix=settings.API_PREFIX)
+app.include_router(discordancias.router, prefix=settings.API_PREFIX)
+app.include_router(dashboard.router, prefix=settings.API_PREFIX)
 
 
 @app.get("/saude", tags=["infra"])

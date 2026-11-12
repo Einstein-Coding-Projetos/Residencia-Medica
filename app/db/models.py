@@ -436,3 +436,117 @@ class AlertaAnomalia(Base):
     criado_em: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=agora_utc, nullable=False
     )
+
+
+class Notificacao(Base):
+    """Aviso dentro do sistema para um usuário (Sprint 4).
+
+    Gerada por app.core.notificacoes_service: prazos de engajamento,
+    escaladas, avaliações recebidas e discordâncias.
+    """
+
+    __tablename__ = "notificacoes"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    usuario_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("usuarios.id"), nullable=False, index=True
+    )
+    tipo: Mapped[str] = mapped_column(String(50), nullable=False)
+    titulo: Mapped[str] = mapped_column(String(200), nullable=False)
+    mensagem: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    referencia: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    lida_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    criado_em: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=agora_utc, nullable=False
+    )
+
+
+class AlertaEngajamento(Base):
+    """Marco D15/D20/D25 já disparado para um par preceptor-residente no mês.
+
+    Serve de trava para o job não repetir o mesmo alerta (ver
+    app.core.engajamento_service). `competencia` é o 1º dia do mês.
+    """
+
+    __tablename__ = "alertas_engajamento"
+    __table_args__ = (
+        UniqueConstraint(
+            "preceptor_id", "residente_id", "competencia", "marco",
+            name="uq_alerta_engajamento",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    preceptor_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("usuarios.id"), nullable=False, index=True
+    )
+    residente_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("usuarios.id"), nullable=False
+    )
+    competencia: Mapped[date] = mapped_column(Date, nullable=False)
+    marco: Mapped[str] = mapped_column(String(5), nullable=False)  # D15 | D20 | D25
+    criado_em: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=agora_utc, nullable=False
+    )
+
+
+class OmissaoAvaliacao(Base):
+    """Mês fechado sem avaliação do preceptor sobre um residente alocado com ele.
+
+    É registro histórico (não se apaga). Enquanto não houver avaliação
+    confirmada daquele mês, bloqueia a certificação do residente — ver
+    app.core.engajamento_service.bloqueios_certificacao.
+    """
+
+    __tablename__ = "omissoes_avaliacao"
+    __table_args__ = (
+        UniqueConstraint(
+            "preceptor_id", "residente_id", "competencia",
+            name="uq_omissao_avaliacao",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    preceptor_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("usuarios.id"), nullable=False, index=True
+    )
+    residente_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("usuarios.id"), nullable=False, index=True
+    )
+    competencia: Mapped[date] = mapped_column(Date, nullable=False)
+    registrada_em: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=agora_utc, nullable=False
+    )
+
+
+class Discordancia(Base):
+    """Discordância formal do residente sobre uma avaliação recebida.
+
+    Prazo de 7 dias a partir da confirmação. A avaliação original nunca é
+    alterada: a discordância fica anexada a ela, com hash próprio. O
+    avaliador responde uma única vez; a resposta também recebe hash.
+    """
+
+    __tablename__ = "discordancias"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    avaliacao_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("avaliacoes.id"), nullable=False, unique=True
+    )
+    residente_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("usuarios.id"), nullable=False, index=True
+    )
+    avaliador_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("usuarios.id"), nullable=False, index=True
+    )
+    motivo: Mapped[str] = mapped_column(Text, nullable=False)
+    hash_integridade: Mapped[str] = mapped_column(String(64), nullable=False)
+    criada_em: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=agora_utc, nullable=False
+    )
+
+    resposta: Mapped[str | None] = mapped_column(Text, nullable=True)
+    hash_resposta: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    respondida_em: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
