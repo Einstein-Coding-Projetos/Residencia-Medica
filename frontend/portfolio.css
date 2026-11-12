@@ -168,3 +168,16 @@
 }
 
 a.nav-item { text-decoration: none; box-sizing: border-box; }
+
+/* ---------- atualizar nível de EPA (preceptor / R4-R5) ---------- */
+.epa-editar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  padding: 0 0 14px 70px; border-bottom: 1px solid var(--borda); font-size: 15px;
+}
+.epa-editar label { margin: 0; font-size: 14px; color: var(--tinta-fraca); }
+.epa-editar select { height: 38px; font-size: 16px; padding: 0 8px; border: 2px solid var(--borda); border-radius: 8px; background: #FFFFFF; }
+.epa-editar button { height: 38px; padding: 0 14px; font-size: 14px; font-weight: 700; color: #FFFFFF; background: var(--cirurgico); }
+.epa-msg { font-size: 14px; color: var(--tinta-fraca); }
+.epa-msg.erro { color: var(--alerta); }
+.epa-msg.ok { color: var(--cirurgico); font-weight: 700; }
+@media (max-width: 720px) { .epa-editar { padding-left: 0; } }

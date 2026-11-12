@@ -26,6 +26,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.instrumentos import INSTRUMENTOS, obter_instrumento
+from app.core.engajamento_service import status_certificacao
 from app.core.portfolio_epas import NIVEIS_ENTRUSTAMENTO, progresso_epas
 from app.db.models import Avaliacao, Procedimento, Programa, Usuario, agora_utc
 from app.schemas.procedimentos import ROTULOS_PARTICIPACAO
@@ -325,6 +326,7 @@ def montar_portfolio(db: Session, residente: Usuario) -> dict:
     zwisch = _bloco_zwisch(avaliacoes)
     procedimentos = _bloco_procedimentos(db, residente.id)
     epas = _bloco_epas(db, residente.id)
+    certificacao = status_certificacao(db, residente.id)
 
     datas = [a["data"] for a in avaliacoes]
 
@@ -347,4 +349,5 @@ def montar_portfolio(db: Session, residente: Usuario) -> dict:
         "zwisch": zwisch,
         "procedimentos": procedimentos,
         "avaliacoes": avaliacoes,
+        "certificacao": certificacao,
     }

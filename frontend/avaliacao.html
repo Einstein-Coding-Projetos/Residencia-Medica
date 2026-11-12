@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Nova avaliação — Residência Médica</title>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:wght@500;600&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="portfolio.css">
+<style>
+  .ficha { max-width: 900px; display: flex; flex-direction: column; gap: 18px; }
+  .dominio { border-top: 1px solid var(--borda); padding: 14px 0; }
+  .dominio:first-of-type { border-top: none; padding-top: 0; }
+  .dominio h3 { font-size: 17px; margin: 0 0 2px; }
+  .dominio .descricao { font-size: 14px; color: var(--tinta-fraca); margin: 0 0 10px; }
+  .escala { display: flex; flex-wrap: wrap; gap: 8px; }
+  .escala label {
+    display: flex; align-items: center; justify-content: center; min-width: 48px; height: 48px;
+    padding: 0 10px; font-size: 18px; font-weight: 700; margin: 0;
+    border: 2px solid var(--borda); border-radius: 8px; background: #FBFCFB; cursor: pointer;
+  }
+  .escala input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .escala input:checked + span { color: #FFFFFF; }
+  .escala label:has(input:checked) { background: var(--cirurgico); border-color: var(--cirurgico); color: #FFFFFF; }
+  .escala label:has(input:focus-visible) { outline: 3px solid var(--cirurgico); outline-offset: 2px; }
+  .ancoras { font-size: 13px; color: var(--tinta-fraca); margin: 8px 0 0; line-height: 1.5; }
+  .confirmacao { display: flex; gap: 12px; align-items: flex-start; font-size: 16px; font-weight: 600; }
+  .confirmacao input { width: 24px; height: 24px; margin-top: 2px; flex-shrink: 0; }
+  .resultado { background: #E2F0EC; border-left: 4px solid var(--cirurgico); border-radius: 0 10px 10px 0; padding: 16px 18px; font-size: 16px; }
+  .enviar { width: 100%; max-width: 420px; height: 56px; font-size: 18px; font-weight: 700; color: #FFFFFF; background: var(--cirurgico); }
+  .enviar:disabled { background: var(--tinta-fraca); cursor: progress; }
+</style>
+</head>
+<body>
+<div class="painel">
+  <nav class="lateral">
+    <p class="marca">Residência Médica</p>
+    <p class="subtitulo">Ficha de avaliação</p>
+  </nav>
+
+  <div class="conteudo">
+    <header class="topo">
+      <h1>Nova avaliação</h1>
+      <div class="acoes"><a class="voltar" href="dashboard.html">← Painel</a></div>
+    </header>
+
+    <main class="corpo-painel">
+      <div class="ficha" id="ficha"><p class="aviso">Carregando…</p></div>
+    </main>
+  </div>
+</div>
+
+<script>
+  const API = "http://localhost:8000/api/v1";
+
+  let sessao = null;
+  let instrumentos = [];
+  let instrumento = null;   // detalhado
+  let abertaEm = Date.now(); // para o tempo de preenchimento
+  let rascunhoId = null;     // avaliação criada mas ainda não confirmada
+
+  const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const num = (v) => Number.isInteger(v) ? String(v) : Number(v).toFixed(1).replace(".", ",");
+  const hojeIso = () => {
+    const d = new Date();
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  };
+  const el = (id) => document.getElementById(id);
+
+  function carregarSessao() {
+    const bruto = sessionStorage.getItem("sessao");
+    if (!bruto) { window.location.href = "login.html"; return null; }
+    return JSON.parse(bruto);
+  }
+
+  async function api(caminho, opcoes = {}) {
+    const r = await fetch(API + caminho, {
+      ...opcoes,
+      headers: { Authorization: `Bearer ${sessao.access_token}`, "Content-Type": "application/json" },
+    });
+    if (r.status === 401) { sessionStorage.removeItem("sessao"); window.location.href = "login.html"; throw new Error("Sessão expirada."); }
+    const corpo = await r.json().catch(() => null);
+    if (!r.ok) {
+      const d = corpo?.detail;
+      const msg = typeof d === "string" ? d
+        : Array.isArray(d) ? d.map((x) => x.msg).join(" ") : "Não foi possível concluir a operação.";
+      throw new Error(msg);
+    }
+    return corpo;
+  }
+
+  // ------------------------------------------------------------ montagem
+  async function iniciar() {
+    sessao = carregarSessao();
+    if (!sessao) return;
+    if (!["preceptor", "avaliador_intermediario"].includes(sessao.usuario.papel)) {
+      el("ficha").innerHTML = '<p class="aviso erro-carga">Só preceptores e avaliadores R4/R5 preenchem fichas de avaliação.</p>';
+      return;
+    }
+    try {
+      const [lista, residentes, epas] = await Promise.all([
+        api("/instrumentos"), api("/portfolio/residentes"), api("/epas"),
+      ]);
+      // SETQ é o residente avaliando o preceptor — tem tela/rota própria.
+      instrumentos = lista.filter((i) => !i.anonimo);
+      const doPrograma = epas.filter((e) => !sessao.usuario.programa_id || e.programa_id === sessao.usuario.programa_id);
+      montarCabecalho(residentes, doPrograma);
+      await trocarInstrumento(instrumentos[0]?.codigo);
+    } catch (e) {
+      el("ficha").innerHTML = `<p class="aviso erro-carga">${esc(e.message)}</p>`;
+    }
+  }
+
+  function montarCabecalho(residentes, epas) {
+    const pedido = new URLSearchParams(location.search).get("residente");
+    el("ficha").innerHTML = `
+      <section class="bloco">
+        <h2>Quem e quando</h2>
+        <div class="form-grade">
+          <label>Residente
+            <select id="residente">${residentes.map((r) =>
+              `<option value="${r.id}" ${r.id === pedido ? "selected" : ""}>${esc(r.nome)}</option>`).join("")}</select>
+          </label>
+          <label>Instrumento
+            <select id="instrumento" onchange="trocarInstrumento(this.value)">${instrumentos.map((i) =>
+              `<option value="${i.codigo}">${esc(i.nome)}</option>`).join("")}</select>
+          </label>
+          <label>Data da atividade
+            <input type="date" id="dataAtividade" value="${hojeIso()}" max="${hojeIso()}">
+          </label>
+          <label>EPA observada (opcional)
+            <select id="epa"><option value="">— nenhuma —</option>${epas.map((e) =>
+              `<option value="${e.id}">${esc(e.codigo)} — ${esc(e.titulo)}</option>`).join("")}</select>
+          </label>
+        </div>
+        ${residentes.length ? "" : '<p class="aviso erro-carga">Nenhum residente disponível para você avaliar.</p>'}
+      </section>
+      <section class="bloco" id="itens"></section>
+      <section class="bloco">
+        <h2>Observações e feedback</h2>
+        <div class="form-texto"><textarea id="observacoes" placeholder="Pontos fortes, o que melhorar, contexto do caso."></textarea></div>
+      </section>
+      <section class="bloco">
+        <label class="confirmacao"><input type="checkbox" id="confirmo"><span id="textoConfirmacao"></span></label>
+        <div id="mensagem"></div>
+        <button class="enviar" id="botaoEnviar" onclick="enviar()">Enviar avaliação</button>
+        <p class="meta">Depois de enviada, a avaliação não pode ser alterada. O residente tem 7 dias para registrar discordância.</p>
+      </section>`;
+    // Qualquer mudança no formulário invalida um rascunho criado antes.
+    // (O checkbox da declaração não conta: marcá-lo não muda o conteúdo.)
+    el("ficha").addEventListener("input", (ev) => { if (ev.target.id !== "confirmo") rascunhoId = null; });
+  }
+
+  async function trocarInstrumento(codigo) {
+    if (!codigo) return;
+    instrumento = await api(`/instrumentos/${codigo}`);
+    rascunhoId = null;
+    el("textoConfirmacao").textContent = instrumento.texto_confirmacao;
+    el("itens").innerHTML = instrumento.codigo === "zwisch" ? formularioZwisch() : formularioDominios();
+  }
+
+  function radios(nome, min, max) {
+    let html = "";
+    for (let n = min; n <= max; n++) {
+      html += `<label><input type="radio" name="${nome}" value="${n}"><span>${instrumento.codigo === "zwisch" ? "Z" + n : n}</span></label>`;
+    }
+    return `<div class="escala" role="radiogroup">${html}</div>`;
+  }
+
+  function legendaAncoras() {
+    const ancoras = Object.entries(instrumento.ancora_escala || {});
+    if (!ancoras.length) return "";
+    return `<p class="ancoras">${ancoras.map(([n, t]) => `<strong>${instrumento.codigo === "zwisch" ? "Z" + n : n}</strong>: ${esc(t)}`).join("<br>")}</p>`;
+  }
+
+  function formularioDominios() {
+    return `
+      <h2>${esc(instrumento.nome)}</h2>
+      <p class="meta">Escala de ${instrumento.escala_min} a ${instrumento.escala_max} em cada domínio.</p>
+      ${instrumento.dominios.map((d) => `
+        <div class="dominio">
+          <h3>${esc(d.titulo)}</h3>
+          ${d.descricao ? `<p class="descricao">${esc(d.descricao)}</p>` : ""}
+          ${radios("dom-" + d.codigo, instrumento.escala_min, instrumento.escala_max)}
+        </div>`).join("")}
+      ${legendaAncoras()}`;
+  }
+
+  function formularioZwisch() {
+    return `
+      <h2>${esc(instrumento.nome)}</h2>
+      <div class="form-grade" style="grid-template-columns:1fr">
+        <label>Etapa cirúrgica observada<input type="text" id="etapa" placeholder="Ex.: dissecção do triângulo de Calot"></label>
+      </div>
+      <div class="dominio">
+        <h3>Nível de autonomia</h3>
+        ${radios("nivel", instrumento.escala_min, instrumento.escala_max)}
+      </div>
+      ${legendaAncoras()}`;
+  }
+
+  // ------------------------------------------------------------ envio
+  function marcado(nome) {
+    const r = document.querySelector(`input[name="${nome}"]:checked`);
+    return r ? Number(r.value) : null;
+  }
+
+  function montarCorpo() {
+    const corpo = {
+      residente_id: el("residente").value,
+      instrumento: instrumento.codigo,
+      observacoes: el("observacoes").value.trim(),
+      data_atividade: el("dataAtividade").value || null,
+      epa_id: el("epa").value || null,
+      itens: [],
+    };
+    if (!corpo.residente_id) throw new Error("Escolha o residente.");
+    if (instrumento.codigo === "zwisch") {
+      corpo.etapa_cirurgica = el("etapa").value.trim();
+      corpo.nivel_autonomia = marcado("nivel");
+      if (!corpo.etapa_cirurgica) throw new Error("Informe a etapa cirúrgica observada.");
+      if (!corpo.nivel_autonomia) throw new Error("Escolha o nível de autonomia.");
+    } else {
+      const faltando = [];
+      for (const d of instrumento.dominios) {
+        const nota = marcado("dom-" + d.codigo);
+        if (nota === null) faltando.push(d.titulo);
+        else corpo.itens.push({ dominio: d.codigo, nota });
+      }
+      if (faltando.length) throw new Error("Falta pontuar: " + faltando.join(", ") + ".");
+    }
+    return corpo;
+  }
+
+  function mensagem(html, erro = true) {
+    el("mensagem").innerHTML = html ? `<p class="aviso ${erro ? "erro-carga" : ""}" style="margin:12px 0">${html}</p>` : "";
+  }
+
+  async function enviar() {
+    mensagem("");
+    let corpo;
+    try { corpo = montarCorpo(); } catch (e) { mensagem(esc(e.message)); return; }
+    if (!el("confirmo").checked) { mensagem("Marque a declaração de observação direta para enviar."); return; }
+
+    const botao = el("botaoEnviar");
+    botao.disabled = true;
+    botao.textContent = "Enviando…";
+    try {
+      if (!rascunhoId) {
+        rascunhoId = (await api("/avaliacoes", { method: "POST", body: JSON.stringify(corpo) })).id;
+      }
+      const tempo = Math.round((Date.now() - abertaEm) / 1000);
+      const final = await api(`/avaliacoes/${rascunhoId}/confirmar`, {
+        method: "POST",
+        body: JSON.stringify({ confirmo_observacao_direta: true, tempo_preenchimento_segundos: tempo }),
+      });
+      el("ficha").innerHTML = `
+        <div class="resultado">
+          <strong>Avaliação enviada.</strong><br>
+          ${esc(final.instrumento_nome)}: ${num(final.nota)}
+          ${final.instrumento === "zwisch" ? "" : ` (de ${final.total_minimo} a ${final.total_maximo})`}
+          ${final.faixa_rotulo ? ` · ${esc(final.faixa_rotulo)}` : ""}<br>
+          ${final.faixa_descricao ? `<span class="meta">${esc(final.faixa_descricao)}</span><br>` : ""}
+          <span class="meta">Integridade: ${esc((final.hash_integridade || "").slice(0, 16))}…</span>
+        </div>
+        <p><a class="voltar" href="avaliacao.html">Nova avaliação</a> &nbsp; <a class="voltar" href="dashboard.html">Voltar ao painel</a></p>`;
+    } catch (e) {
+      // Se a criação passou e a confirmação falhou (ex.: verificação de
+      // contexto), o rascunho fica guardado: tentar de novo só confirma.
+      mensagem(esc(e.message) + (rascunhoId
+        ? "<br>A ficha ficou salva como rascunho. Corrija o problema e envie de novo, sem precisar preencher outra vez."
+        : ""));
+      botao.disabled = false;
+      botao.textContent = "Enviar avaliação";
+    }
+  }
+
+  iniciar();
+</script>
+</body>
+</html>

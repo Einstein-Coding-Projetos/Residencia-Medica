@@ -16,12 +16,13 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import UsuarioAtual
 from app.api.routes.discordancias import prazo_discordancia
-from app.api.routes.engajamento import montar_pendencias, montar_status_certificacao
+from app.api.routes.engajamento import montar_pendencias
 from app.core.contexto_service import servicos_do_usuario_em
 from app.core.engajamento_service import (
     bloqueios_certificacao,
     competencia_de,
     fim_da_competencia,
+    status_certificacao,
 )
 from app.core.epa_service import calcular_mapa_epas
 from app.core.instrumentos import obter_instrumento
@@ -113,7 +114,7 @@ def _painel_residente(db: Session, residente: Usuario, hoje: date) -> dict:
             "abertas": sum(1 for d in discordancias if d.resposta is None),
             "respondidas": sum(1 for d in discordancias if d.resposta is not None),
         },
-        "certificacao": montar_status_certificacao(db, residente.id),
+        "certificacao": status_certificacao(db, residente.id),
     }
 
 

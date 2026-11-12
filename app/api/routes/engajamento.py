@@ -14,6 +14,7 @@ from app.core.engajamento_service import (
     bloqueios_certificacao,
     competencia_de,
     pendencias_do_mes,
+    status_certificacao,
     verificar_engajamento,
 )
 from app.core.permissoes_portfolio import exigir_pode_ver_portfolio
@@ -122,7 +123,7 @@ def listar_omissoes(
     response_model=StatusCertificacao,
     summary="A certificação do residente está bloqueada por omissão de avaliação?",
 )
-def status_certificacao(
+def consultar_certificacao(
     residente_id: uuid.UUID,
     usuario: UsuarioAtual,
     db: Annotated[Session, Depends(get_db)],
@@ -131,15 +132,4 @@ def status_certificacao(
     if residente is None or residente.papel != Papel.RESIDENTE:
         raise HTTPException(status_code=404, detail="Residente não encontrado.")
     exigir_pode_ver_portfolio(usuario, residente)
-    return montar_status_certificacao(db, residente_id)
-
-
-def montar_status_certificacao(db: Session, residente_id: uuid.UUID) -> dict:
-    ativas = bloqueios_certificacao(db, residente_id)
-    meses = ", ".join(o.competencia.strftime("%m/%Y") for o in ativas)
-    return {
-        "residente_id": residente_id,
-        "bloqueada": bool(ativas),
-        "motivo": f"Meses sem avaliação obrigatória: {meses}." if ativas else None,
-        "omissoes": [OmissaoPublica.model_validate(o) for o in ativas],
-    }
+    return status_certificacao(db, residente_id)

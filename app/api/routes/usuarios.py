@@ -2,15 +2,18 @@
 para dados fictícios de desenvolvimento)."""
 from __future__ import annotations
 
+import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.deps import SomenteAdministrador
 from app.core.auth_service import criar_usuario
 from app.core.security import SenhaInvalida
+from app.db.models import Papel, Usuario
 from app.db.session import get_db
 from app.schemas.auth import UsuarioCreate, UsuarioPublico
 
@@ -52,3 +55,22 @@ def cadastrar_usuario(
         ) from None
 
     return UsuarioPublico.model_validate(usuario)
+
+
+@router.get(
+    "",
+    response_model=list[UsuarioPublico],
+    summary="Listar usuários ativos (somente administrador)",
+)
+def listar_usuarios(
+    _admin: SomenteAdministrador,
+    db: Annotated[Session, Depends(get_db)],
+    papel: Papel | None = None,
+    programa_id: uuid.UUID | None = None,
+):
+    query = select(Usuario).where(Usuario.ativo.is_(True)).order_by(Usuario.nome)
+    if papel is not None:
+        query = query.where(Usuario.papel == papel)
+    if programa_id is not None:
+        query = query.where(Usuario.programa_id == programa_id)
+    return list(db.scalars(query))

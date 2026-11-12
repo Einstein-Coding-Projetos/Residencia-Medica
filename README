@@ -98,6 +98,38 @@ gerado em `alembic/versions/` antes de commitar.
   O administrador também pode disparar pelo painel (aba Governança) ou
   por `POST /api/v1/engajamento/verificar`.
 
+### Login institucional (SSO)
+
+Pronto para OpenID Connect (Microsoft Entra/Office 365, Google Workspace
+ou outro provedor OIDC), **desligado por padrão**. O login por senha
+continua funcionando. Só entra por SSO quem já foi cadastrado pelo
+administrador com o mesmo e-mail — o sistema não cria conta sozinho.
+
+**O que pedir à TI da instituição:**
+
+1. Registrar um aplicativo "web" no provedor de identidade.
+2. Cadastrar como URL de redirecionamento (redirect URI) o callback da API:
+   `https://<endereço-da-api>/api/v1/auth/sso/callback`.
+3. Liberar os escopos `openid email profile`.
+4. Informar: o **issuer** (no Microsoft Entra:
+   `https://login.microsoftonline.com/<tenant-id>/v2.0`), o **client ID** e
+   o **client secret**.
+
+**Configurar no `.env`:**
+
+```
+SSO_HABILITADO=true
+SSO_NOME_PROVEDOR=Microsoft institucional
+SSO_ISSUER=https://login.microsoftonline.com/<tenant-id>/v2.0
+SSO_CLIENT_ID=<client id>
+SSO_CLIENT_SECRET=<client secret>
+SSO_REDIRECT_URI=https://<endereço-da-api>/api/v1/auth/sso/callback
+SSO_URL_FRONTEND=https://<endereço-do-site>/login.html
+```
+
+Com isso, a tela de login mostra o botão "Entrar com Microsoft
+institucional".
+
 
 ## Fluxo de trabalho (Git)
 

@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Avaliar preceptor — Residência Médica</title>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:wght@500;600&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="portfolio.css">
+<style>
+  .ficha { max-width: 900px; display: flex; flex-direction: column; gap: 18px; }
+  .dominio { border-top: 1px solid var(--borda); padding: 14px 0; }
+  .dominio:first-of-type { border-top: none; padding-top: 0; }
+  .dominio h3 { font-size: 17px; margin: 0 0 2px; }
+  .dominio .descricao { font-size: 14px; color: var(--tinta-fraca); margin: 0 0 10px; }
+  .escala { display: flex; flex-wrap: wrap; gap: 8px; }
+  .escala label {
+    display: flex; align-items: center; justify-content: center; min-width: 48px; height: 48px;
+    padding: 0 10px; font-size: 18px; font-weight: 700; margin: 0;
+    border: 2px solid var(--borda); border-radius: 8px; background: #FBFCFB; cursor: pointer;
+  }
+  .escala input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .escala label:has(input:checked) { background: var(--cirurgico); border-color: var(--cirurgico); color: #FFFFFF; }
+  .escala label:has(input:focus-visible) { outline: 3px solid var(--cirurgico); outline-offset: 2px; }
+  .ancoras { font-size: 13px; color: var(--tinta-fraca); margin: 8px 0 0; line-height: 1.5; }
+  .confirmacao { display: flex; gap: 12px; align-items: flex-start; font-size: 16px; font-weight: 600; }
+  .confirmacao input { width: 24px; height: 24px; margin-top: 2px; flex-shrink: 0; }
+  .resultado { background: #E2F0EC; border-left: 4px solid var(--cirurgico); border-radius: 0 10px 10px 0; padding: 16px 18px; font-size: 16px; }
+  .enviar { width: 100%; max-width: 420px; height: 56px; font-size: 18px; font-weight: 700; color: #FFFFFF; background: var(--cirurgico); }
+  .enviar:disabled { background: var(--tinta-fraca); cursor: progress; }
+</style>
+</head>
+<body>
+<div class="painel">
+  <nav class="lateral">
+    <p class="marca">Residência Médica</p>
+    <p class="subtitulo">SETQ Smart</p>
+  </nav>
+
+  <div class="conteudo">
+    <header class="topo">
+      <h1>Avaliar preceptor</h1>
+      <div class="acoes"><a class="voltar" href="dashboard.html">← Painel</a></div>
+    </header>
+
+    <main class="corpo-painel">
+      <div class="ficha" id="ficha"><p class="aviso">Carregando…</p></div>
+    </main>
+  </div>
+</div>
+
+<script>
+  const API = "http://localhost:8000/api/v1";
+
+  let sessao = null;
+  let instrumento = null;
+  let rascunhoId = null;
+
+  const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const el = (id) => document.getElementById(id);
+  const ROTULOS_PAPEL = { preceptor: "Preceptor", avaliador_intermediario: "R4/R5" };
+
+  function carregarSessao() {
+    const bruto = sessionStorage.getItem("sessao");
+    if (!bruto) { window.location.href = "login.html"; return null; }
+    return JSON.parse(bruto);
+  }
+
+  async function api(caminho, opcoes = {}) {
+    const r = await fetch(API + caminho, {
+      ...opcoes,
+      headers: { Authorization: `Bearer ${sessao.access_token}`, "Content-Type": "application/json" },
+    });
+    if (r.status === 401) { sessionStorage.removeItem("sessao"); window.location.href = "login.html"; throw new Error("Sessão expirada."); }
+    const corpo = await r.json().catch(() => null);
+    if (!r.ok) {
+      const d = corpo?.detail;
+      throw new Error(typeof d === "string" ? d : Array.isArray(d) ? d.map((x) => x.msg).join(" ") : "Não foi possível concluir a operação.");
+    }
+    return corpo;
+  }
+
+  async function iniciar() {
+    sessao = carregarSessao();
+    if (!sessao) return;
+    if (sessao.usuario.papel !== "residente") {
+      el("ficha").innerHTML = '<p class="aviso erro-carga">O SETQ Smart é preenchido pelo residente sobre o preceptor.</p>';
+      return;
+    }
+    try {
+      const [preceptores, inst] = await Promise.all([
+        api("/avaliacoes/setq/preceptores"), api("/instrumentos/setq_smart"),
+      ]);
+      instrumento = inst;
+      montar(preceptores);
+    } catch (e) {
+      el("ficha").innerHTML = `<p class="aviso erro-carga">${esc(e.message)}</p>`;
+    }
+  }
+
+  function radios(nome) {
+    let html = "";
+    for (let n = instrumento.escala_min; n <= instrumento.escala_max; n++) {
+      html += `<label><input type="radio" name="${nome}" value="${n}"><span>${n}</span></label>`;
+    }
+    return `<div class="escala" role="radiogroup">${html}</div>`;
+  }
+
+  function montar(preceptores) {
+    const ancoras = Object.entries(instrumento.ancora_escala || {});
+    el("ficha").innerHTML = `
+      <p class="aviso">Sua resposta é <strong>anônima</strong>: o preceptor só vê a média de todas as respostas,
+        e só quando houver pelo menos 3. Avalie com base na sua experiência real com ele(a).</p>
+      <section class="bloco">
+        <h2>Quem você vai avaliar</h2>
+        <div class="form-grade">
+          <label>Preceptor
+            <select id="preceptor">${preceptores.map((p) =>
+              `<option value="${p.id}">${esc(p.nome)} (${esc(ROTULOS_PAPEL[p.papel] ?? p.papel)})</option>`).join("")}</select>
+          </label>
+        </div>
+        ${preceptores.length ? "" : '<p class="aviso erro-carga">Nenhum preceptor disponível no seu programa.</p>'}
+      </section>
+      <section class="bloco">
+        <h2>${esc(instrumento.nome)}</h2>
+        <p class="meta">Escala de ${instrumento.escala_min} a ${instrumento.escala_max} em cada domínio.</p>
+        ${instrumento.dominios.map((d) => `
+          <div class="dominio">
+            <h3>${esc(d.titulo)}</h3>
+            ${d.descricao ? `<p class="descricao">${esc(d.descricao)}</p>` : ""}
+            ${radios("dom-" + d.codigo)}
+          </div>`).join("")}
+        ${ancoras.length ? `<p class="ancoras">${ancoras.map(([n, t]) => `<strong>${n}</strong>: ${esc(t)}`).join("<br>")}</p>` : ""}
+      </section>
+      <section class="bloco">
+        <h2>Comentários (opcional)</h2>
+        <div class="form-texto"><textarea id="observacoes" placeholder="O que esse preceptor faz bem e o que poderia melhorar no ensino."></textarea></div>
+      </section>
+      <section class="bloco">
+        <label class="confirmacao"><input type="checkbox" id="confirmo"><span>${esc(instrumento.texto_confirmacao)}</span></label>
+        <div id="mensagem"></div>
+        <button class="enviar" id="botaoEnviar" onclick="enviar()" ${preceptores.length ? "" : "disabled"}>Enviar avaliação</button>
+      </section>`;
+    el("ficha").addEventListener("input", (ev) => { if (ev.target.id !== "confirmo") rascunhoId = null; });
+  }
+
+  function mensagem(html) {
+    el("mensagem").innerHTML = html ? `<p class="aviso erro-carga" style="margin:12px 0">${html}</p>` : "";
+  }
+
+  async function enviar() {
+    mensagem("");
+    const itens = [], faltando = [];
+    for (const d of instrumento.dominios) {
+      const r = document.querySelector(`input[name="dom-${d.codigo}"]:checked`);
+      if (r) itens.push({ dominio: d.codigo, nota: Number(r.value) }); else faltando.push(d.titulo);
+    }
+    if (faltando.length) { mensagem("Falta pontuar: " + esc(faltando.join(", ")) + "."); return; }
+    if (!el("confirmo").checked) { mensagem("Marque a declaração para enviar."); return; }
+
+    const botao = el("botaoEnviar");
+    botao.disabled = true;
+    botao.textContent = "Enviando…";
+    try {
+      if (!rascunhoId) {
+        rascunhoId = (await api("/avaliacoes/setq", {
+          method: "POST",
+          body: JSON.stringify({ preceptor_id: el("preceptor").value, itens, observacoes: el("observacoes").value.trim() }),
+        })).id;
+      }
+      await api(`/avaliacoes/${rascunhoId}/confirmar`, { method: "POST", body: JSON.stringify({ confirmo_observacao_direta: true }) });
+      el("ficha").innerHTML = `
+        <div class="resultado"><strong>Obrigado! Sua avaliação foi enviada de forma anônima.</strong></div>
+        <p><a class="voltar" href="setq.html">Avaliar outro preceptor</a> &nbsp; <a class="voltar" href="dashboard.html">Voltar ao painel</a></p>`;
+    } catch (e) {
+      mensagem(esc(e.message));
+      botao.disabled = false;
+      botao.textContent = "Enviar avaliação";
+    }
+  }
+
+  iniciar();
+</script>
+</body>
+</html>

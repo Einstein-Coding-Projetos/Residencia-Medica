@@ -56,26 +56,35 @@
     residente: [
       { titulo: "Painel", render: () => painelResidente() },
       { titulo: "Avaliações recebidas", render: () => avaliacoesRecebidas() },
+      { titulo: "Avaliar preceptor (SETQ)", link: "setq.html" },
       { titulo: "Notificações", render: () => notificacoes() },
       { titulo: "Portfólio", link: "portfolio.html" },
     ],
     preceptor: [
       { titulo: "Painel", render: () => painelAvaliador() },
+      { titulo: "Nova avaliação", link: "avaliacao.html" },
       { titulo: "Discordâncias", render: () => discordanciasAvaliador() },
+      { titulo: "Meu SETQ", render: () => meuSetq() },
       { titulo: "Notificações", render: () => notificacoes() },
       { titulo: "Meus residentes", link: "portfolio.html" },
     ],
     avaliador_intermediario: [
       { titulo: "Painel", render: () => painelAvaliador() },
+      { titulo: "Nova avaliação", link: "avaliacao.html" },
       { titulo: "Discordâncias", render: () => discordanciasAvaliador() },
+      { titulo: "Meu SETQ", render: () => meuSetq() },
       { titulo: "Notificações", render: () => notificacoes() },
       { titulo: "Meus residentes", link: "portfolio.html" },
     ],
     administrador: [
       { titulo: "Painel", render: () => painelAdmin() },
+      { titulo: "Alocações", render: () => alocacoes() },
       { titulo: "Governança", render: () => governanca() },
       { titulo: "Notificações", render: () => notificacoes() },
       { titulo: "Portfólios", link: "portfolio.html" },
+      { titulo: "Cadastros", provisorio: "Programas, especialidades e serviços." },
+      { titulo: "Usuários", provisorio: "Contas de residentes, preceptores e administradores." },
+      { titulo: "Auditoria", provisorio: "Trilha de ações registradas no sistema." },
     ],
   };
 
@@ -219,6 +228,24 @@
     } catch (e) { alert(e.message); }
   }
 
+  async function meuSetq() {
+    const [resumo, inst] = await Promise.all([
+      api(`/avaliacoes/setq/resumo/${sessao.usuario.id}`), api("/instrumentos/setq_smart"),
+    ]);
+    const explicacao = vazio("As respostas dos residentes são anônimas. A média só aparece com pelo menos 3 respostas, para ninguém ser identificado.");
+    if (!resumo.disponivel) {
+      return bloco("Avaliação do seu ensino (SETQ Smart)",
+        `<div class="kpis">${kpi(resumo.total_respostas, "respostas recebidas")}</div>
+         <p class="vazio" style="margin-top:12px">Ainda não há respostas suficientes para mostrar o resultado.</p>${explicacao}`);
+    }
+    const titulos = Object.fromEntries(inst.dominios.map((d) => [d.codigo, d.titulo]));
+    const linhas = Object.entries(resumo.media_por_dominio).map(([dom, media]) =>
+      `<li>${esc(titulos[dom] ?? dom)} <strong style="float:right">${num(media)} / ${inst.escala_max}</strong></li>`).join("");
+    return bloco("Avaliação do seu ensino (SETQ Smart)",
+      `<div class="kpis">${kpi(resumo.total_respostas, "respostas recebidas")}</div>
+       <ul class="lista" style="margin-top:14px">${linhas}</ul>${explicacao}`);
+  }
+
   // ------------------------------------------------------------ administrador
   async function painelAdmin() {
     const p = await api("/dashboard");
@@ -261,6 +288,57 @@
     try {
       const r = await api("/engajamento/verificar", { method: "POST" });
       alert(`Verificação concluída: ${r.alertas_criados.length} alerta(s), ${r.escaladas} escalada(s), ${r.omissoes_registradas.length} omissão(ões).`);
+      recarregar();
+    } catch (e) { alert(e.message); }
+  }
+
+  // ------------------------------------------------------------ alocações (admin)
+  async function alocacoes() {
+    const [usuarios, servicos, lista] = await Promise.all([
+      api("/usuarios"), api("/servicos"), api("/alocacoes"),
+    ]);
+    const clinicos = usuarios.filter((u) => u.papel !== "administrador");
+    const nomeUsuario = Object.fromEntries(usuarios.map((u) => [u.id, u]));
+    const nomeServico = Object.fromEntries(servicos.map((s) => [s.id, s.nome]));
+    const hoje = new Date().toISOString().slice(0, 10);
+    const opcoes = (itens, rotulo) => itens.map((i) => `<option value="${i.id}">${esc(rotulo(i))}</option>`).join("");
+
+    const formulario = `
+      <div class="form-grade">
+        <label>Usuário<select id="alocUsuario">${opcoes(clinicos, (u) => `${u.nome} (${ROTULOS_PAPEL[u.papel] ?? u.papel})`)}</select></label>
+        <label>Serviço<select id="alocServico">${opcoes(servicos.filter((s) => s.ativo), (s) => s.nome)}</select></label>
+        <label>Início<input type="date" id="alocInicio" value="${hoje}"></label>
+        <label>Fim<input type="date" id="alocFim"></label>
+      </div>
+      <button class="acao" onclick="salvarAlocacao()">Registrar alocação</button>
+      <p class="meta">Avaliador e residente precisam estar alocados no mesmo serviço na data da atividade para a avaliação ser aceita.</p>`;
+
+    const ordenadas = [...lista].sort((a, b) => b.data_inicio.localeCompare(a.data_inicio));
+    const tabela = ordenadas.length
+      ? `<ul class="lista">${ordenadas.map((a) => {
+          const u = nomeUsuario[a.usuario_id];
+          const vigente = a.data_inicio <= hoje && hoje <= a.data_fim;
+          return `<li><strong>${esc(u?.nome ?? a.usuario_id)}</strong> · ${esc(nomeServico[a.servico_id] ?? "serviço removido")}
+            <div class="meta">${esc(ROTULOS_PAPEL[u?.papel] ?? "")} · ${data(a.data_inicio)} a ${data(a.data_fim)}${vigente ? " · vigente" : ""}</div></li>`;
+        }).join("")}</ul>`
+      : vazio("Nenhuma alocação registrada ainda.");
+
+    return bloco("Nova alocação", formulario) + bloco("Alocações registradas", tabela);
+  }
+
+  async function salvarAlocacao() {
+    const corpo = {
+      usuario_id: document.getElementById("alocUsuario").value,
+      servico_id: document.getElementById("alocServico").value,
+      data_inicio: document.getElementById("alocInicio").value,
+      data_fim: document.getElementById("alocFim").value,
+    };
+    if (!corpo.usuario_id || !corpo.servico_id || !corpo.data_inicio || !corpo.data_fim) {
+      alert("Preencha usuário, serviço, início e fim.");
+      return;
+    }
+    try {
+      await api("/alocacoes", { method: "POST", body: JSON.stringify(corpo) });
       recarregar();
     } catch (e) { alert(e.message); }
   }
@@ -313,6 +391,14 @@
   async function selecionar(indice) {
     const secao = window._secoes[indice];
     if (secao.link) { window.location.href = secao.link; return; }
+    if (secao.provisorio) {
+      indiceAtual = indice;
+      document.querySelectorAll(".nav-item").forEach((el, i) => el.classList.toggle("ativo", i === indice));
+      document.getElementById("tituloSecao").textContent = secao.titulo;
+      area().innerHTML = `<div class="grade-cartoes"><div class="cartao"><h3>${esc(secao.titulo)}</h3>
+        <p>${esc(secao.provisorio)} Disponível em um próximo sprint.</p></div></div>`;
+      return;
+    }
 
     indiceAtual = indice;
     document.querySelectorAll(".nav-item").forEach((el, i) => el.classList.toggle("ativo", i === indice));

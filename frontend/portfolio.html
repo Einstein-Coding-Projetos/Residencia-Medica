@@ -51,6 +51,8 @@
   let sessao = null;
   let residenteAtual = null; // null = "meu" (residente logado)
   let dados = null;
+  let idsEpa = {}; // codigo -> epa_id, só quando quem vê pode atualizar nível
+  const PODE_ATUALIZAR = () => ["preceptor", "avaliador_intermediario"].includes(sessao?.usuario?.papel) && residenteAtual;
 
   // ------------------------------------------------------------ utilidades
   const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) =>
@@ -123,8 +125,13 @@
     try {
       const caminho = residenteAtual ? `/portfolio/${residenteAtual}` : "/portfolio/meu";
       dados = await (await chamar(caminho)).json();
+      idsEpa = {};
+      if (PODE_ATUALIZAR()) {
+        const mapa = await (await chamar(`/epas/mapa/${residenteAtual}`)).json();
+        idsEpa = Object.fromEntries(mapa.map((m) => [m.codigo, m.epa_id]));
+      }
       miolo.innerHTML = [
-        blocoResumo(dados), blocoEpas(dados.epas), blocoInstrumentos(dados.instrumentos),
+        blocoCertificacao(dados.certificacao), blocoResumo(dados), blocoEpas(dados.epas), blocoInstrumentos(dados.instrumentos),
         blocoZwisch(dados.zwisch), blocoProcedimentos(dados.procedimentos), blocoHistorico(dados.avaliacoes),
       ].join("");
       document.getElementById("botaoPdf").disabled = false;
@@ -156,6 +163,13 @@
   }
 
   // ------------------------------------------------------------ blocos
+  function blocoCertificacao(c) {
+    // Sprint 4: omissão de avaliação do preceptor bloqueia a certificação.
+    if (!c || !c.bloqueada) return "";
+    return `<p class="aviso erro-carga"><strong>Certificação bloqueada.</strong> ${esc(c.motivo)}
+      O bloqueio cai quando a avaliação do mês for lançada com a data real da atividade.</p>`;
+  }
+
   function blocoResumo(p) {
     const r = p.residente, s = p.resumo;
     const periodo = s.primeira_avaliacao ? `${data(s.primeira_avaliacao)} a ${data(s.ultima_avaliacao)}` : "sem avaliações confirmadas";
@@ -195,6 +209,48 @@
     }).join("")}</span>`;
   }
 
+  // Preceptor/R4-R5: atualizar o nível de entrustamento (Sprint 3). O
+  // backend aplica o mínimo de observações e o bloqueio de 30 dias.
+  function controleNivel(e) {
+    const epaId = idsEpa[e.codigo];
+    if (!epaId) return "";
+    const opcoes = [1, 2, 3, 4, 5].map((n) =>
+      `<option value="${n}" ${n === e.nivel_atual ? "selected" : ""}>${n}</option>`).join("");
+    return `
+      <div class="epa-editar">
+        <label for="nivel-${epaId}">Novo nível</label>
+        <select id="nivel-${epaId}">${opcoes}</select>
+        <button onclick="atualizarNivel('${epaId}', '${esc(e.codigo)}')">Atualizar nível</button>
+        <span class="epa-msg" id="msg-${epaId}"></span>
+      </div>`;
+  }
+
+  async function atualizarNivel(epaId, codigo) {
+    const nivel = Number(document.getElementById(`nivel-${epaId}`).value);
+    const msg = document.getElementById(`msg-${epaId}`);
+    msg.className = "epa-msg";
+    msg.textContent = "Salvando…";
+    try {
+      const r = await fetch(API + "/epas/progresso", {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${sessao.access_token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ residente_id: residenteAtual, epa_id: epaId, nivel_atual: nivel }),
+      });
+      if (r.status === 401) { sessionStorage.removeItem("sessao"); window.location.href = "login.html"; return; }
+      const corpo = await r.json().catch(() => null);
+      if (!r.ok) {
+        const d = corpo?.detail;
+        throw new Error(typeof d === "string" ? d : "Não foi possível atualizar o nível.");
+      }
+      await carregar();
+      const nova = document.getElementById(`msg-${epaId}`);
+      if (nova) { nova.textContent = `${codigo} atualizada para o nível ${nivel}.`; nova.className = "epa-msg ok"; }
+    } catch (e) {
+      msg.textContent = e.message;
+      msg.className = "epa-msg erro";
+    }
+  }
+
   function blocoEpas(epas) {
     let corpo = "";
     if (epas.mensagem) corpo += `<p class="aviso" style="margin-bottom:14px">${esc(epas.mensagem)}</p>`;
@@ -224,7 +280,7 @@
             ${trajetoria(e, epas.anos, epas.ano_residente)}
             ${comparar ? barraNiveis(e.nivel_atual, e.nivel_esperado, 5, COR[e.situacao]) : ""}
             ${comparar ? `<span class="situacao ${e.situacao}">${SITUACAO[e.situacao]}</span>` : ""}
-          </div>`;
+          </div>${controleNivel(e)}`;
       }
       const niveis = Object.entries(epas.niveis).map(([n, t]) => `<b>${n}</b> ${esc(t)}`).join(" · ");
       const legenda = comparar ? `

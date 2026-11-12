@@ -276,3 +276,25 @@ def bloqueios_certificacao(db: Session, residente_id: uuid.UUID) -> list[Omissao
         if (omissao.preceptor_id, residente_id) not in pares_avaliados(db, omissao.competencia, fim):
             ativas.append(omissao)
     return ativas
+
+
+def status_certificacao(db: Session, residente_id: uuid.UUID) -> dict:
+    """Resumo usado pela rota de certificação, pelo painel e pelo portfólio."""
+    ativas = bloqueios_certificacao(db, residente_id)
+    meses = ", ".join(o.competencia.strftime("%m/%Y") for o in ativas)
+    return {
+        "residente_id": residente_id,
+        "bloqueada": bool(ativas),
+        "motivo": f"Meses sem avaliação obrigatória: {meses}." if ativas else None,
+        "omissoes": [
+            {
+                "id": o.id,
+                "preceptor_id": o.preceptor_id,
+                "residente_id": o.residente_id,
+                "competencia": o.competencia,
+                "registrada_em": o.registrada_em,
+                "ativa": True,
+            }
+            for o in ativas
+        ],
+    }

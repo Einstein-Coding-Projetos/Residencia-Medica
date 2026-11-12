@@ -26,6 +26,11 @@
           <input id="senha" type="password" autocomplete="current-password" />
         </div>
         <button class="entrar" id="botao" onclick="entrar()">Entrar</button>
+        <div id="blocoSso" hidden>
+          <p style="text-align:center;color:var(--tinta-fraca);margin:18px 0 12px">ou</p>
+          <button class="entrar" id="botaoSso" onclick="entrarSso()"
+            style="background:#FFFFFF;color:var(--cirurgico);border:2px solid var(--cirurgico)"></button>
+        </div>
       </div>
     </div>
   </div>
@@ -83,6 +88,49 @@
       botao.textContent = "Entrar";
     }
   }
+
+  // ---------------------------------------------------------- SSO
+  function entrarSso() {
+    window.location.href = `${API}/auth/sso/iniciar`;
+  }
+
+  function mostrarErro(texto) {
+    const erroEl = document.getElementById("erro");
+    erroEl.textContent = texto;
+    erroEl.style.display = "block";
+  }
+
+  async function prepararSso() {
+    // Volta do provedor: o callback da API manda #sso=<token> ou #sso_erro=<msg>.
+    const fragmento = new URLSearchParams(window.location.hash.slice(1));
+    if (fragmento.has("sso") || fragmento.has("sso_erro")) {
+      history.replaceState(null, "", window.location.pathname); // tira o token da barra de endereço
+    }
+    if (fragmento.has("sso_erro")) mostrarErro(fragmento.get("sso_erro"));
+    if (fragmento.has("sso")) {
+      const access_token = fragmento.get("sso");
+      try {
+        const r = await fetch(`${API}/auth/eu`, { headers: { Authorization: `Bearer ${access_token}` } });
+        if (!r.ok) throw new Error();
+        const usuario = await r.json();
+        // Mesmo formato que o login por senha grava.
+        sessionStorage.setItem("sessao", JSON.stringify({ access_token, token_type: "bearer", usuario }));
+        window.location.href = "dashboard.html";
+        return;
+      } catch (e) {
+        mostrarErro("Não foi possível concluir o login institucional. Tente de novo.");
+      }
+    }
+    try {
+      const config = await (await fetch(`${API}/auth/sso/config`)).json();
+      if (config.habilitado) {
+        document.getElementById("botaoSso").textContent = `Entrar com ${config.nome_provedor}`;
+        document.getElementById("blocoSso").hidden = false;
+      }
+    } catch (e) { /* sem API: o login por senha mostra o erro ao tentar */ }
+  }
+
+  prepararSso();
 
   document.getElementById("senha").addEventListener("keydown", (e) => {
     if (e.key === "Enter") entrar();

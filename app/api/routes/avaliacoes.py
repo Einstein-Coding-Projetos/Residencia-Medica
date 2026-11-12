@@ -25,9 +25,14 @@ from app.core.instrumentos import (
     validar_itens,
     validar_zwisch,
 )
-from app.core.permissoes_avaliacao import exigir_pode_avaliar, exigir_pode_avaliar_setq
-from app.db.models import EPA, Avaliacao, Papel, Usuario, agora_utc
+from app.core.permissoes_avaliacao import (
+    exigir_pode_avaliar,
+    exigir_pode_avaliar_setq,
+    pode_avaliar_setq,
+)
+from app.db.models import EPA, PAPEIS_AVALIADORES, Avaliacao, Papel, Usuario, agora_utc
 from app.db.session import get_db
+from app.schemas.auth import UsuarioPublico
 from app.schemas.avaliacoes import (
     AvaliacaoCriar,
     AvaliacaoPublica,
@@ -458,6 +463,24 @@ def criar_setq(
     db.refresh(avaliacao)
 
     return _montar_resposta(avaliacao)
+
+
+@router.get(
+    "/setq/preceptores",
+    response_model=list[UsuarioPublico],
+    summary="Preceptores e R4/R5 que o residente pode avaliar no SETQ Smart",
+)
+def preceptores_para_setq(
+    residente: SomenteResidente,
+    db: Annotated[Session, Depends(get_db)],
+):
+    candidatos = db.scalars(
+        select(Usuario)
+        .where(Usuario.papel.in_(list(PAPEIS_AVALIADORES)))
+        .where(Usuario.ativo.is_(True))
+        .order_by(Usuario.nome)
+    )
+    return [u for u in candidatos if pode_avaliar_setq(residente, u)]
 
 
 @router.get(

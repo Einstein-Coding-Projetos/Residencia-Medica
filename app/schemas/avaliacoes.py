@@ -129,3 +129,4 @@ class InstrumentoPublico(BaseModel):
     dominios: list[DominioPublico]
     faixas: list[FaixaPublica]
     observacao_interna: str
+    texto_confirmacao: str = ""

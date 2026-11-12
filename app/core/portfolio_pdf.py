@@ -412,6 +412,28 @@ def _bloco_capa(p: dict, e: dict) -> list:
     return [faixa, tabela_kpi, Spacer(1, 10)]
 
 
+def _bloco_certificacao(p: dict, e: dict) -> list:
+    """Faixa de alerta logo abaixo da capa quando a certificação está bloqueada."""
+    cert = p.get("certificacao") or {}
+    if not cert.get("bloqueada"):
+        return []
+    texto = (
+        "<b>CERTIFICAÇÃO BLOQUEADA</b> — "
+        + _limpo(cert.get("motivo") or "Há meses sem avaliação obrigatória do preceptor.")
+        + " O bloqueio cai quando a avaliação do mês é lançada com a data real da atividade."
+    )
+    texto = f'<font color="{ALERTA.hexval()}">{texto}</font>'
+    caixa = Table([[Paragraph(texto, e["celula"])]], colWidths=[LARGURA_UTIL])
+    caixa.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#FBEFEE")),
+        ("LINEBEFORE", (0, 0), (0, -1), 4, ALERTA),
+        ("LEFTPADDING", (0, 0), (-1, -1), 10),
+        ("TOPPADDING", (0, 0), (-1, -1), 8),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+    ]))
+    return [caixa, Spacer(1, 10)]
+
+
 def _titulo_secao(numero: int, texto: str, e: dict) -> list:
     return [
         CondPageBreak(40 * mm),
@@ -698,6 +720,7 @@ def gerar_pdf_portfolio(portfolio: dict) -> bytes:
 
     historia: list = []
     historia += _bloco_capa(portfolio, e)
+    historia += _bloco_certificacao(portfolio, e)
     numero = 1
     for bloco in (_bloco_epas, _bloco_instrumentos, _bloco_zwisch, _bloco_procedimentos, _bloco_historico):
         partes = bloco(portfolio, e, numero)

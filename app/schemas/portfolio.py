@@ -6,6 +6,8 @@ from datetime import date, datetime
 
 from pydantic import BaseModel
 
+from app.schemas.governanca import StatusCertificacao
+
 
 class ResidentePortfolio(BaseModel):
     id: uuid.UUID
@@ -173,3 +175,5 @@ class PortfolioPublico(BaseModel):
     zwisch: list[EtapaZwisch]
     procedimentos: ProcedimentosPortfolio
     avaliacoes: list[AvaliacaoPortfolio]
+    # Sprint 4: bloqueio por omissão de avaliação do preceptor.
+    certificacao: StatusCertificacao | None = None

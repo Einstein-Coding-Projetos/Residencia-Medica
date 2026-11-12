@@ -50,6 +50,7 @@ def _serializar(instrumento: Instrumento) -> dict:
             for f in instrumento.faixas
         ],
         "observacao_interna": instrumento.observacao_interna,
+        "texto_confirmacao": instrumento.texto_confirmacao,
     }
 
 

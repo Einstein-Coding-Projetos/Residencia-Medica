@@ -148,3 +148,9 @@ button {
   font-family: var(--corpo); border: 2px solid var(--borda); border-radius: 8px;
 }
 .marco { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 99px; background: #F5F0E1; color: #8A5A00; margin-left: 6px; }
+.form-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.form-grade label { font-size: 15px; margin-bottom: 0; }
+.form-grade select, .form-grade input {
+  display: block; width: 100%; height: 46px; margin-top: 6px; padding: 0 10px; font-size: 16px;
+  font-family: var(--corpo); border: 2px solid var(--borda); border-radius: 8px; background: #FBFCFB;
+}
